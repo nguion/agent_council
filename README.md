@@ -15,6 +15,21 @@ A modular, agentic framework for creating, customizing, and executing councils o
 
 ## Installation & Setup
 
+### Quick Setup (Recommended)
+
+Run the setup script:
+
+```bash
+bash setup.sh
+```
+
+This will:
+- Create a virtual environment
+- Install all dependencies
+- Set up your API key interactively
+
+### Manual Setup
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -30,7 +45,7 @@ OPENAI_API_KEY=sk-...
 ## Usage (5-step flow)
 
 ```bash
-python3 test_flow_full.py
+python3 agentcouncil.py
 ```
 
 Steps:
@@ -80,6 +95,6 @@ agent = AgentBuilder.create(config)
 - Progress tables show live status; TLDRs printed for quick inspection.
 
 ## Notes for Agentic Tools
-- `a.agents` provides a minimal descriptor: entrypoint `python3 test_flow_full.py`, requires `OPENAI_API_KEY`.
-- Tools enabled per persona: web search can be toggled; tool usage is recorded in outputs.
+- `.agents` file provides project metadata for AI coding assistants
+- Tools enabled per persona: web search can be toggled; tool usage is recorded in outputs
 

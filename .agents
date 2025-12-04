@@ -1,0 +1,42 @@
+{
+  "name": "Agent Council",
+  "description": "A modular, agentic framework for creating, customizing, and executing councils of specialized AI agents (powered by GPT-5.1) to solve complex problems in parallel.",
+  "entrypoint": "python3 agentcouncil.py",
+  "setup": {
+    "commands": [
+      "bash setup.sh"
+    ],
+    "requirements": [
+      "Python 3.8+",
+      "OpenAI API key"
+    ]
+  },
+  "environment": {
+    "OPENAI_API_KEY": {
+      "required": true,
+      "description": "Your OpenAI API key for GPT-5.1 and other models"
+    }
+  },
+  "workflow": {
+    "steps": [
+      "Ingest question and optional context files (PDF, DOCX, TXT, MD)",
+      "Build council of specialized agent personas",
+      "Edit and refine the council interactively",
+      "Execute agents in parallel with live progress tracking",
+      "Peer review and chairman synthesis for final answer"
+    ]
+  },
+  "outputs": {
+    "logs": "logs/*.md - Full session logs with prompts, responses, and token usage",
+    "results": "council_session_complete.json - Complete results including peer reviews and final verdict"
+  },
+  "features": [
+    "Multi-agent parallel execution",
+    "Token usage and cost tracking",
+    "Interactive CLI with rich terminal UI",
+    "Web search and file ingestion capabilities",
+    "Context condensation for large inputs",
+    "Structured peer review and synthesis"
+  ]
+}
+
