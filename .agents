@@ -1,0 +1,20 @@
+{
+  "name": "Agent Council",
+  "description": "A modular framework for creating and executing councils of specialized AI agents to solve complex problems.",
+  "entrypoint": "python3 run_council.py",
+  "environment_variables": {
+    "OPENAI_API_KEY": "Required. API key for OpenAI (GPT-5.1)."
+  },
+  "usage": "Run the entrypoint script. Follow the CLI prompts to input a query, upload context files, review the proposed agent council, and execute the session.",
+  "capabilities": [
+    "Ingests PDF, DOCX, TXT, MD files for context.",
+    "Automatically generates agent personas based on the query.",
+    "Allows manual editing of the agent council.",
+    "Executes agents in parallel with reasoning capabilities.",
+    "Synthesizes results through a Chairman agent."
+  ],
+  "notes": [
+    "Install dependencies with: python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt && pip install -e .",
+    "Outputs are saved to 'council_session_complete.json' and detailed logs in 'logs/'."
+  ]
+}
