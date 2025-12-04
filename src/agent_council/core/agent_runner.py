@@ -82,23 +82,159 @@ async def run_agent(
         except Exception:
             tools_used = []
 
-        # Log if requested
-        if logger:
-            usage_data = {}
-            if hasattr(result, 'usage'):
-                usage = result.usage
-                # usage may be an object or a dict; try common fields
+        # Extract token usage - check multiple possible locations
+        usage_data = {}
+        total_input = 0
+        total_output = 0
+        
+        # Debug: Print all attributes of result to help diagnose
+        # Uncomment for debugging: print(f"DEBUG: result attributes: {dir(result)}")
+        # Uncomment for debugging: print(f"DEBUG: result type: {type(result)}")
+        
+        # Method 1: Check result.usage (direct attribute)
+        if hasattr(result, 'usage') and result.usage:
+            usage = result.usage
+            def get(u, *keys):
+                for k in keys:
+                    v = getattr(u, k, None) if not isinstance(u, dict) else u.get(k)
+                    if v is not None and v != 0:
+                        return v
+                return None
+            
+            prompt_tokens = get(usage, 'prompt_tokens', 'input_tokens', 'input')
+            completion_tokens = get(usage, 'completion_tokens', 'output_tokens', 'output')
+            if prompt_tokens is not None:
+                total_input = prompt_tokens
+            if completion_tokens is not None:
+                total_output = completion_tokens
+        
+        # Method 2: Check result.items for individual usage (aggregate if needed)
+        if (total_input == 0 and total_output == 0) and hasattr(result, 'items') and result.items:
+            for item in result.items:
+                # Check if item has usage
+                if hasattr(item, 'usage') and item.usage:
+                    usage = item.usage
+                    def get(u, *keys):
+                        for k in keys:
+                            v = getattr(u, k, None) if not isinstance(u, dict) else u.get(k)
+                            if v is not None and v != 0:
+                                return v
+                        return None
+                    prompt_tokens = get(usage, 'prompt_tokens', 'input_tokens', 'input')
+                    completion_tokens = get(usage, 'completion_tokens', 'output_tokens', 'output')
+                    if prompt_tokens:
+                        total_input += prompt_tokens
+                    if completion_tokens:
+                        total_output += completion_tokens
+                
+                # Also check for response objects within items
+                if hasattr(item, 'response') and item.response:
+                    resp = item.response
+                    if hasattr(resp, 'usage') and resp.usage:
+                        usage = resp.usage
+                        def get(u, *keys):
+                            for k in keys:
+                                v = getattr(u, k, None) if not isinstance(u, dict) else u.get(k)
+                                if v is not None and v != 0:
+                                    return v
+                            return None
+                        prompt_tokens = get(usage, 'prompt_tokens', 'input_tokens', 'input')
+                        completion_tokens = get(usage, 'completion_tokens', 'output_tokens', 'output')
+                        if prompt_tokens:
+                            total_input += prompt_tokens
+                        if completion_tokens:
+                            total_output += completion_tokens
+        
+        # Method 3: Check for summary or aggregated usage
+        if (total_input == 0 and total_output == 0) and hasattr(result, 'summary'):
+            summary = result.summary
+            if hasattr(summary, 'usage') and summary.usage:
+                usage = summary.usage
                 def get(u, *keys):
                     for k in keys:
                         v = getattr(u, k, None) if not isinstance(u, dict) else u.get(k)
-                        if v is not None:
+                        if v is not None and v != 0:
                             return v
                     return None
-                usage_data = {
-                    "input_tokens": get(usage, 'prompt_tokens', 'input_tokens', 'input') or 0,
-                    "output_tokens": get(usage, 'completion_tokens', 'output_tokens', 'output') or 0,
-                    "total_tokens": get(usage, 'total_tokens', 'total') or 0,
-                }
+                prompt_tokens = get(usage, 'prompt_tokens', 'input_tokens', 'input')
+                completion_tokens = get(usage, 'completion_tokens', 'output_tokens', 'output')
+                if prompt_tokens:
+                    total_input = prompt_tokens
+                if completion_tokens:
+                    total_output = completion_tokens
+        
+        # Method 4: Check runner for aggregated usage (if runner tracks it)
+        if (total_input == 0 and total_output == 0) and runner and hasattr(runner, 'usage'):
+            runner_usage = runner.usage
+            if runner_usage:
+                def get(u, *keys):
+                    for k in keys:
+                        v = getattr(u, k, None) if not isinstance(u, dict) else u.get(k)
+                        if v is not None and v != 0:
+                            return v
+                    return None
+                prompt_tokens = get(runner_usage, 'prompt_tokens', 'input_tokens', 'input')
+                completion_tokens = get(runner_usage, 'completion_tokens', 'output_tokens', 'output')
+                if prompt_tokens:
+                    total_input = prompt_tokens
+                if completion_tokens:
+                    total_output = completion_tokens
+        
+        # Method 5: Try to access via __dict__ or inspect all attributes
+        if (total_input == 0 and total_output == 0):
+            # Try to find any attribute that might contain usage
+            for attr_name in dir(result):
+                if 'usage' in attr_name.lower() and not attr_name.startswith('_'):
+                    try:
+                        attr_value = getattr(result, attr_name)
+                        if attr_value:
+                            def get(u, *keys):
+                                for k in keys:
+                                    v = getattr(u, k, None) if not isinstance(u, dict) else u.get(k)
+                                    if v is not None and v != 0:
+                                        return v
+                                return None
+                            prompt_tokens = get(attr_value, 'prompt_tokens', 'input_tokens', 'input')
+                            completion_tokens = get(attr_value, 'completion_tokens', 'output_tokens', 'output')
+                            if prompt_tokens:
+                                total_input = prompt_tokens
+                            if completion_tokens:
+                                total_output = completion_tokens
+                            if total_input > 0 or total_output > 0:
+                                break
+                    except Exception:
+                        continue
+        
+        # Build usage_data dict
+        usage_data = {
+            "input_tokens": total_input or 0,
+            "output_tokens": total_output or 0,
+            "total_tokens": (total_input or 0) + (total_output or 0),
+        }
+        
+        # Log if requested
+        if logger:
+            # If we couldn't find usage and logger is enabled, log a warning
+            if total_input == 0 and total_output == 0:
+                # Try one more time: check if result has __dict__ with usage info
+                if hasattr(result, '__dict__'):
+                    result_dict = result.__dict__
+                    for key, value in result_dict.items():
+                        if 'usage' in key.lower() and value:
+                            try:
+                                if hasattr(value, 'prompt_tokens'):
+                                    usage_data["input_tokens"] = getattr(value, 'prompt_tokens', 0) or 0
+                                if hasattr(value, 'completion_tokens'):
+                                    usage_data["output_tokens"] = getattr(value, 'completion_tokens', 0) or 0
+                                if hasattr(value, 'total_tokens'):
+                                    usage_data["total_tokens"] = getattr(value, 'total_tokens', 0) or 0
+                                if usage_data["input_tokens"] > 0 or usage_data["output_tokens"] > 0:
+                                    total_input = usage_data["input_tokens"]
+                                    total_output = usage_data["output_tokens"]
+                                    break
+                            except Exception:
+                                continue
+            
             logger.log_llm_call(
                 stage=stage or "unspecified",
                 agent_name=getattr(agent, "name", "unknown"),
@@ -109,9 +245,8 @@ async def run_agent(
 
         if verbose:
             print("✅ Response received\n")
-            if hasattr(result, 'usage'):
-                usage = result.usage
-                print(f"📊 Tokens: {getattr(usage, 'total_tokens', 'N/A')}")
+            if usage_data.get('total_tokens', 0) > 0:
+                print(f"📊 Tokens: Input={usage_data.get('input_tokens', 0)}, Output={usage_data.get('output_tokens', 0)}, Total={usage_data.get('total_tokens', 0)}")
                 print()
         
         if return_full:

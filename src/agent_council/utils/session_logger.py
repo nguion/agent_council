@@ -35,12 +35,13 @@ class SessionLogger:
         response: str,
         usage: Optional[Dict[str, Any]] = None,
     ):
-        in_tokens = usage.get("input_tokens") if usage else 0
-        out_tokens = usage.get("output_tokens") if usage else 0
-        if in_tokens:
-            self.total_input_tokens += in_tokens
-        if out_tokens:
-            self.total_output_tokens += out_tokens
+        in_tokens = usage.get("input_tokens", 0) if usage else 0
+        out_tokens = usage.get("output_tokens", 0) if usage else 0
+        # Ensure we have integers, not None
+        in_tokens = int(in_tokens) if in_tokens else 0
+        out_tokens = int(out_tokens) if out_tokens else 0
+        self.total_input_tokens += in_tokens
+        self.total_output_tokens += out_tokens
 
         with open(self.path, "a", encoding="utf-8") as f:
             f.write(f"### Stage: {stage} | Agent: {agent_name}\n\n")

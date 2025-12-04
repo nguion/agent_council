@@ -2,29 +2,42 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.Python
+
+# Virtual environments
 .venv/
 venv/
 env/
-*.so
+ENV/
 
 # Distribution / Packaging
 dist/
 build/
 *.egg-info/
+*.egg
 
 # Environment
 .env
 .env.local
+.env.*.local
 
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
-# Project specific
+# Project specific - generated files
 council_session_results.json
 current_council_config.json
 final_council_config.json
+council_session_complete.json
 *.log
 logs/
-council_session_complete.json
+
+# OS
+.DS_Store
+Thumbs.db
 
