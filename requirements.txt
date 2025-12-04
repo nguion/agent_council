@@ -1,0 +1,7 @@
+openai-agents
+openai
+python-dotenv
+rich
+pypdf
+python-docx
+

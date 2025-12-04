@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.so
+
+# Distribution / Packaging
+dist/
+build/
+*.egg-info/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# Project specific
+council_session_results.json
+current_council_config.json
+final_council_config.json
+*.log
+logs/
+council_session_complete.json
+
