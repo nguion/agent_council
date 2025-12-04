@@ -23,7 +23,7 @@ class CouncilChairman:
     1. Read the Original Question.
     2. Analyze the Proposals from your council members.
     3. Consider the Peer Critiques (where members pointed out flaws in each other's work).
-    4. Filter out noise, weak arguments, or hallucinations identified by peers.
+    4. Filter out noise and weak arguments identified by peers.
     5. Elevate the strongest, most novel, and most realistic ideas.
     6. Draft a cohesive, authoritative final answer.
 

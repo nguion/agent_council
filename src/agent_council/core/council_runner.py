@@ -51,9 +51,18 @@ class CouncilRunner:
                 "summarizing your key points, followed by your full detailed response.\n\n"
             )
 
+            # Add explicit tool awareness
+            TOOL_AWARENESS = ""
+            if agent_config.get('enable_web_search', False):
+                TOOL_AWARENESS = (
+                    "\nTOOL USAGE: You have access to a Web Search tool. "
+                    "You MUST use it to find up-to-date information if the user's query involves "
+                    "current events, specific data, or topics where your internal knowledge might be outdated.\n"
+                )
+
             # Agent Persona
             persona = agent_config.get('persona', 'You are a helpful assistant.')
-            full_instructions = f"{STANDARD_TASK}YOUR PERSONA: {persona}"
+            full_instructions = f"{STANDARD_TASK}{TOOL_AWARENESS}YOUR NAME: {agent_name}\nYOUR PERSONA: {persona}"
 
             # Build the agent
             config = AgentConfig(
@@ -135,8 +144,7 @@ class CouncilRunner:
                 meta = item['metadata']
                 context_str += f"\n--- Source: {meta['filename']} ---\n"
                 content = item['content']
-                if len(content) > 15000:
-                    content = content[:15000] + "... [truncated]"
+                # Removed hard truncation: rely on condense_prompt in agent_runner if limits hit
                 context_str += content
         
         full_prompt = f"""

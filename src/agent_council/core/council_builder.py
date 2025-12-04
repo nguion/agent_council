@@ -60,11 +60,8 @@ class CouncilBuilder:
             for item in context_data:
                 meta = item['metadata']
                 context_str += f"\n--- File: {meta['filename']} ---\n"
-                # Truncate very long content to avoid overflowing context window purely with one file
-                # (Simple truncation for MVP)
                 content = item['content']
-                if len(content) > 20000:
-                    content = content[:20000] + "... [truncated]"
+                # Removed hard truncation: rely on condense_prompt in agent_runner if limits hit
                 context_str += content
         
         full_prompt = f"""

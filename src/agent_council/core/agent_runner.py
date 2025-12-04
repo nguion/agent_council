@@ -73,12 +73,29 @@ async def run_agent(
         # Extract tool usage if present
         tools_used = []
         try:
-            items = getattr(result, "items", None)
-            if items:
-                for it in items:
-                    name = getattr(it, "tool_name", None) or getattr(it, "tool", None)
-                    if name:
-                        tools_used.append(name)
+            # Check both items and new_items
+            all_items = []
+            if hasattr(result, "items") and result.items:
+                all_items.extend(result.items)
+            if hasattr(result, "new_items") and result.new_items:
+                all_items.extend(result.new_items)
+            
+            for it in all_items:
+                # Direct attributes
+                name = getattr(it, "tool_name", None) or getattr(it, "tool", None)
+                if name:
+                    tools_used.append(name)
+                    continue
+                
+                # Check raw_item for SDK objects
+                raw = getattr(it, "raw_item", None)
+                if raw:
+                    # For WebSearch: ResponseFunctionWebSearch has .type='web_search_call'
+                    if hasattr(raw, "type") and raw.type:
+                        tools_used.append(raw.type)
+                    elif hasattr(raw, "function") and hasattr(raw.function, "name"):
+                        tools_used.append(raw.function.name)
+                    
         except Exception:
             tools_used = []
 
