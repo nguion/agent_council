@@ -32,7 +32,7 @@
   },
   "features": [
     "Multi-agent parallel execution",
-    "Token usage and cost tracking",
+    "Token usage and cost tracking (USD calculation based on model pricing)",
     "Interactive CLI with rich terminal UI",
     "Web search and file ingestion capabilities",
     "Context condensation for large inputs",

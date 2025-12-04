@@ -11,6 +11,10 @@ A modular, agentic framework for creating, customizing, and executing councils o
     4.  **Execute**: Runs all agents in parallel, aggregating their unique perspectives.
 *   **High Modularity**: Agents, tools, and runners are decoupled and easy to extend.
 *   **GPT-5.1 Integration**: Native support for reasoning effort configuration (`none`, `low`, `medium`, `high`).
+*   **Cost & Token Tracking**:
+    *   Real-time token usage monitoring (input/output).
+    *   Automatic cost calculation based on current model pricing (GPT-5.1, GPT-4o, etc.).
+    *   Detailed cost breakdown per agent and total session cost.
 *   **CLI Interface**: Rich terminal UI for easy interaction.
 
 ## Installation & Setup
@@ -90,8 +94,14 @@ agent = AgentBuilder.create(config)
 ```
 
 ## Outputs & Logging
-- `logs/` (markdown): every prompt/response + token counts (per run).  
-- `council_session_complete.json`: full results, peer review scores, chairman verdict, token totals.  
+- `logs/` (markdown): 
+    - Full transcripts of every prompt/response.
+    - Token usage counts (input/output).
+    - **Cost calculation** per call in USD.
+- `council_session_complete.json`: 
+    - Full results and peer review scores.
+    - Chairman's final verdict.
+    - **Detailed cost breakdown** and token totals.
 - Progress tables show live status; TLDRs printed for quick inspection.
 
 ## Notes for Agentic Tools
