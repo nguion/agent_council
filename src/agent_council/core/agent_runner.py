@@ -103,12 +103,15 @@ async def run_agent(
         
         # Log if requested
         if logger:
+            # Get model name from agent
+            model_name = getattr(agent, "model", None) or getattr(agent, "_model", None) or "default"
             logger.log_llm_call(
                 stage=stage or "unspecified",
                 agent_name=getattr(agent, "name", "unknown"),
                 prompt=query,
                 response=response,
-                usage=usage_data
+                usage=usage_data,
+                model=model_name
             )
 
         if verbose:

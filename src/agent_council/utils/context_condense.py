@@ -20,8 +20,9 @@ def _summarize_chunk(client: OpenAI, chunk: str, logger=None, stage: str = "cond
         },
         {"role": "user", "content": chunk},
     ]
+    model_name = "gpt-5.1"
     resp = client.chat.completions.create(
-        model="gpt-5.1",
+        model=model_name,
         messages=messages,
         max_tokens=800,
         temperature=0.1,
@@ -34,7 +35,14 @@ def _summarize_chunk(client: OpenAI, chunk: str, logger=None, stage: str = "cond
             "output_tokens": getattr(usage, "completion_tokens", 0) if usage else 0,
             "total_tokens": getattr(usage, "total_tokens", 0) if usage else 0,
         }
-        logger.log_llm_call(stage=stage, agent_name="CondenseAgent", prompt=chunk, response=summary, usage=usage_data)
+        logger.log_llm_call(
+            stage=stage, 
+            agent_name="CondenseAgent", 
+            prompt=chunk, 
+            response=summary, 
+            usage=usage_data,
+            model=model_name
+        )
     return summary
 
 

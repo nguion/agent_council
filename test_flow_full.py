@@ -219,10 +219,12 @@ async def main_async():
     # Save Full Session
     final_results['peer_reviews'] = reviews
     final_results['chairman_verdict'] = final_verdict
+    cost_breakdown = logger.get_cost_breakdown()
     final_results['tokens'] = {
         "input_tokens": logger.total_input_tokens,
         "output_tokens": logger.total_output_tokens,
         "total_tokens": logger.total_input_tokens + logger.total_output_tokens,
+        "total_cost_usd": cost_breakdown["total_cost_usd"],
         "log_file": logger.path
     }
     
