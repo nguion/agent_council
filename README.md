@@ -21,16 +21,22 @@ A modular, agentic framework for creating, customizing, and executing councils o
 
 ### Quick Setup (Recommended)
 
-Run the setup script:
+**Windows (PowerShell):**
+```powershell
+powershell -ExecutionPolicy Bypass -File setup.ps1
+```
+- Creates `.venv`
+- Installs requirements and the package (`pip install -e .`)
+- Prompts for `OPENAI_API_KEY` and writes `.env`
+- Optionally launches `agentcouncil.py`
 
+**macOS / Linux:**
 ```bash
 bash setup.sh
 ```
-
-This will:
-- Create a virtual environment
-- Install all dependencies
-- Set up your API key interactively
+- Creates `.venv`
+- Installs requirements and the package (`pip install -e .`)
+- Prompts for `OPENAI_API_KEY` and writes `.env`
 
 ### Manual Setup
 
