@@ -31,6 +31,7 @@ class AgentConfig:
     # Tools
     enable_web_search: bool = False
     enable_file_search: bool = False
+    file_search_vector_store_ids: List[str] = field(default_factory=list)
     enable_shell: bool = False
     enable_code_interpreter: bool = False
     custom_tools: List = field(default_factory=list)

@@ -23,10 +23,11 @@ class CouncilRunner:
 
     @staticmethod
     async def run_single_agent(
-        agent_config: Dict[str, Any], 
+        agent_config: Dict[str, Any],
         prompt: str,
         progress_callback: Callable[[str, str], None] = None,
-        logger=None
+        logger=None,
+        max_turns: int = 10,
     ) -> Dict[str, Any]:
         """
         Builds and runs a single agent.
@@ -67,9 +68,16 @@ class CouncilRunner:
             # Build the agent
             config = AgentConfig(
                 name=agent_name,
+                model=agent_config.get('model', 'gpt-5.1'),
                 instructions=full_instructions,
                 enable_web_search=agent_config.get('enable_web_search', False),
-                reasoning_effort=effort_enum
+                enable_file_search=agent_config.get('enable_file_search', False),
+                file_search_vector_store_ids=agent_config.get('file_search_vector_store_ids', []),
+                enable_shell=agent_config.get('enable_shell', False),
+                enable_code_interpreter=agent_config.get('enable_code_interpreter', False),
+                custom_tools=agent_config.get('custom_tools', []),
+                reasoning_effort=effort_enum,
+                max_turns=agent_config.get('max_turns', max_turns),
             )
             
             agent = AgentBuilder.create(config)
@@ -79,9 +87,13 @@ class CouncilRunner:
 
             # Run the agent
             response_text, usage_data, tools_used = await run_agent(
-                agent, prompt, verbose=False,
-                logger=logger, stage=f"execution:{agent_name}",
-                return_full=True
+                agent,
+                prompt,
+                verbose=False,
+                logger=logger,
+                stage=f"execution:{agent_name}",
+                return_full=True,
+                max_turns=agent_config.get('max_turns', max_turns),
             )
             
             if progress_callback:
@@ -117,7 +129,8 @@ class CouncilRunner:
                 "response": str(e),
                 "tldr": "Execution failed.",
                 "status": "error",
-                "tools_used": []
+                "tools_used": [],
+                "error": str(e),
             }
 
     @classmethod
@@ -162,12 +175,34 @@ class CouncilRunner:
 
         # Create tasks for all agents
         tasks = [
-            cls.run_single_agent(agent_conf, full_prompt, progress_callback, logger) 
+            cls.run_single_agent(
+                agent_conf,
+                full_prompt,
+                progress_callback,
+                logger,
+                max_turns=agent_conf.get('max_turns', 10),
+            )
             for agent_conf in agents_data
         ]
         
         # Run them all at once
-        results = await asyncio.gather(*tasks)
+        raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        results = []
+        for idx, r in enumerate(raw_results, start=1):
+            if isinstance(r, Exception):
+                agent_name = agents_data[idx - 1].get("name", f"Agent-{idx}")
+                results.append({
+                    "agent_name": agent_name,
+                    "agent_persona": agents_data[idx - 1].get('persona', 'Participant'),
+                    "response": f"Execution failed: {r}",
+                    "tldr": "Execution failed.",
+                    "status": "error",
+                    "tools_used": [],
+                    "error": str(r),
+                })
+            else:
+                results.append(r)
 
         # Assign stable proposal_ids (1-based) for downstream review/ranking
         for idx, r in enumerate(results, start=1):

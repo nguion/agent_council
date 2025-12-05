@@ -37,6 +37,7 @@ async def run_agent(
         print(f"🤖 {agent.name}: Processing query...")
         print(f"📝 Query: {query}\n")
     
+    tools_used = []
     try:
         try:
             result = await runner.run(agent, query, max_turns=max_turns)
@@ -46,7 +47,7 @@ async def run_agent(
             if "context" in err_msg or "token" in err_msg or "max" in err_msg:
                 if verbose:
                     print("⚠️ Context too large, condensing and retrying...")
-                condensed_query = condense_prompt(query, logger=logger, stage=f"{stage}:condense")
+                condensed_query = await condense_prompt(query, logger=logger, stage=f"{stage}:condense")
                 result = await runner.run(agent, condensed_query, max_turns=max_turns)
                 query = condensed_query  # so we log what we actually sent
             else:
@@ -71,7 +72,6 @@ async def run_agent(
                 response = result_str
         
         # Extract tool usage if present
-        tools_used = []
         try:
             # Check both items and new_items
             all_items = []
@@ -99,19 +99,27 @@ async def run_agent(
         except Exception:
             tools_used = []
 
-        # Extract token usage from result.context_wrapper.usage (per OpenAI Agents SDK docs)
+        # Extract token usage with multiple fallbacks
         usage_data = {}
         total_input = 0
         total_output = 0
         
-        # Method 1: Check result.context_wrapper.usage (correct path per SDK documentation)
+        # Preferred: result.context_wrapper.usage
         if hasattr(result, 'context_wrapper') and hasattr(result.context_wrapper, 'usage'):
             usage = result.context_wrapper.usage
-            # SDK provides these attributes directly
             total_input = getattr(usage, 'input_tokens', 0) or 0
             total_output = getattr(usage, 'output_tokens', 0) or 0
+        # Fallback: result.usage (Responses API style)
+        elif hasattr(result, 'usage'):
+            usage = result.usage
+            total_input = getattr(usage, 'input_tokens', 0) or getattr(usage, 'prompt_tokens', 0) or 0
+            total_output = getattr(usage, 'output_tokens', 0) or getattr(usage, 'completion_tokens', 0) or 0
+        # Fallback: result.response.usage (Agents may embed response object)
+        elif hasattr(result, 'response') and hasattr(result.response, 'usage'):
+            usage = result.response.usage
+            total_input = getattr(usage, 'input_tokens', 0) or getattr(usage, 'prompt_tokens', 0) or 0
+            total_output = getattr(usage, 'output_tokens', 0) or getattr(usage, 'completion_tokens', 0) or 0
         
-        # Build usage_data dict
         usage_data = {
             "input_tokens": int(total_input) if total_input else 0,
             "output_tokens": int(total_output) if total_output else 0,
@@ -128,7 +136,9 @@ async def run_agent(
                 prompt=query,
                 response=response,
                 usage=usage_data,
-                model=model_name
+                model=model_name,
+                tools_used=tools_used,
+                error=False,
             )
 
         if verbose:
@@ -144,6 +154,18 @@ async def run_agent(
     except Exception as e:
         if verbose:
             print(f"❌ Error: {e}\n")
+        if logger:
+            model_name = getattr(agent, "model", None) or getattr(agent, "_model", None) or "default"
+            logger.log_llm_call(
+                stage=stage or "unspecified",
+                agent_name=getattr(agent, "name", "unknown"),
+                prompt=query,
+                response=f"ERROR: {e}",
+                usage={"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+                model=model_name,
+                tools_used=tools_used if 'tools_used' in locals() else [],
+                error=True,
+            )
         raise
 
 
@@ -151,9 +173,13 @@ def run_agent_sync(
     agent: Agent,
     query: str,
     runner: Optional[Runner] = None,
-    max_turns: int = 10,
+    max_turns: Optional[int] = None,
     verbose: bool = True
 ) -> str:
     """Synchronous wrapper for run_agent."""
-    return asyncio.run(run_agent(agent, query, runner, max_turns, verbose))
+    # Respect per-agent max_turns when not explicitly provided
+    turns = max_turns
+    if turns is None:
+        turns = getattr(agent, "max_turns", 10)
+    return asyncio.run(run_agent(agent, query, runner, turns, verbose))
 

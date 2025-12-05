@@ -85,6 +85,8 @@ class SessionLogger:
         response: str,
         usage: Optional[Dict[str, Any]] = None,
         model: Optional[str] = None,
+        tools_used: Optional[Any] = None,
+        error: bool = False,
     ):
         in_tokens = usage.get("input_tokens", 0) if usage else 0
         out_tokens = usage.get("output_tokens", 0) if usage else 0
@@ -100,14 +102,16 @@ class SessionLogger:
         self.total_cost += call_cost
 
         with open(self.path, "a", encoding="utf-8") as f:
-            f.write(f"### Stage: {stage} | Agent: {agent_name}\n\n")
-            if model:
-                f.write(f"- Model: {model}\n")
+            status = "ERROR" if error else "OK"
+            f.write(f"### Stage: {stage} | Agent: {agent_name} | Status: {status}\n\n")
+            f.write(f"- Model: {model_name}\n")
             if in_tokens is not None or out_tokens is not None:
                 f.write(f"- input_tokens: {in_tokens:,}\n")
                 f.write(f"- output_tokens: {out_tokens:,}\n")
-                f.write(f"- Cost: ${call_cost:.6f}\n\n")
-            f.write("**Prompt:**\n\n")
+                f.write(f"- Cost: ${call_cost:.6f}\n")
+            if tools_used:
+                f.write(f"- tools_used: {tools_used}\n")
+            f.write("\n**Prompt:**\n\n")
             f.write("```\n")
             f.write(prompt.strip() + "\n")
             f.write("```\n\n")
@@ -115,6 +119,18 @@ class SessionLogger:
             f.write("```\n")
             f.write(response.strip() + "\n")
             f.write("```\n\n")
+
+    def finalize(self):
+        """Write a session summary to the log file."""
+        total_tokens = (self.total_input_tokens or 0) + (self.total_output_tokens or 0)
+        with open(self.path, "a", encoding="utf-8") as f:
+            f.write("## Summary\n\n")
+            f.write(
+                f"- input_tokens: {self.total_input_tokens or 0:,}\n"
+                f"- output_tokens: {self.total_output_tokens or 0:,}\n"
+                f"- total_tokens: {total_tokens:,}\n"
+                f"- total_cost_usd: ${self.total_cost:.6f}\n\n"
+            )
 
     def summary(self) -> str:
         total_tokens = (self.total_input_tokens or 0) + (self.total_output_tokens or 0)

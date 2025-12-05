@@ -74,13 +74,25 @@ class CouncilReviewer:
             
             # Build reviewer agent
             effort_str = reviewer_config.get('reasoning_effort', 'medium').lower()
-            effort = ReasoningEffort.HIGH if effort_str == 'high' else ReasoningEffort.MEDIUM
+            effort = ReasoningEffort.MEDIUM
+            if effort_str == 'high':
+                effort = ReasoningEffort.HIGH
+            elif effort_str == 'low':
+                effort = ReasoningEffort.LOW
+            elif effort_str == 'none':
+                effort = ReasoningEffort.NONE
             
             config = AgentConfig(
                 name=f"Reviewer-{reviewer_name}",
                 instructions=f"You are {reviewer_name}. {persona}",
                 reasoning_effort=effort,
-                verbosity='low' # concise critique
+                verbosity='low', # concise critique
+                enable_web_search=reviewer_config.get('enable_web_search', False),
+                enable_file_search=reviewer_config.get('enable_file_search', False),
+                file_search_vector_store_ids=reviewer_config.get('file_search_vector_store_ids', []),
+                enable_shell=reviewer_config.get('enable_shell', False),
+                enable_code_interpreter=reviewer_config.get('enable_code_interpreter', False),
+                custom_tools=reviewer_config.get('custom_tools', []),
             )
             agent = AgentBuilder.create(config)
             
@@ -134,6 +146,7 @@ class CouncilReviewer:
         Orchestrates parallel peer reviews.
         """
         tasks = []
+        task_reviewers = []
         agents_map = {a['name']: a for a in council_config.get('agents', [])}
         
         for result in execution_results:
@@ -151,6 +164,14 @@ class CouncilReviewer:
                     other_names = ", ".join([o['agent_name'] for o in others])
                     progress_callback(agent_name, f"Will review: {other_names}")
                 tasks.append(cls.review_others(agent_conf, question, others, progress_callback, logger))
+                task_reviewers.append(agent_name)
         
-        reviews = await asyncio.gather(*tasks)
+        raw_reviews = await asyncio.gather(*tasks, return_exceptions=True)
+        reviews = []
+        for idx, r in enumerate(raw_reviews):
+            if isinstance(r, Exception):
+                reviewer_name = task_reviewers[idx] if idx < len(task_reviewers) else f"Reviewer-{idx+1}"
+                reviews.append({"reviewer": reviewer_name, "error": str(r)})
+            else:
+                reviews.append(r)
         return reviews

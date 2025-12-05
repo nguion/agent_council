@@ -1,6 +1,7 @@
 """Agent builder module - creates configured agents."""
 
 import os
+import subprocess
 from typing import Optional
 from dotenv import load_dotenv
 
@@ -51,20 +52,46 @@ class AgentBuilder:
         if not cls._initialized:
             cls.initialize(disable_tracing=config.disable_tracing)
         
+        def default_shell_executor(command: str) -> str:
+            """Simple shell executor used by ShellTool."""
+            completed = subprocess.run(
+                command,
+                shell=True,
+                capture_output=True,
+                text=True,
+            )
+            output = completed.stdout or ""
+            if completed.stderr:
+                output += f"\nSTDERR:\n{completed.stderr}"
+            return output.strip()
+        
         # Build tools list
         tools = []
         if config.enable_web_search:
             tools.append(WebSearchTool())
         if config.enable_file_search:
-            tools.append(FileSearchTool())
+            tools.append(FileSearchTool(vector_store_ids=config.file_search_vector_store_ids))
         if config.enable_shell:
-            tools.append(ShellTool())
+            tools.append(ShellTool(executor=default_shell_executor))
         if config.enable_code_interpreter:
-            tools.append(CodeInterpreterTool())
+            tools.append(CodeInterpreterTool(tool_config={}))
         tools.extend(config.custom_tools)
         
         # Create model settings
-        model_settings = ModelSettings()
+        reasoning_effort = (
+            config.reasoning_effort.value
+            if isinstance(config.reasoning_effort, ReasoningEffort)
+            else str(config.reasoning_effort)
+        )
+        verbosity_level = (
+            config.verbosity.value
+            if isinstance(config.verbosity, Verbosity)
+            else str(config.verbosity)
+        )
+        model_settings = ModelSettings(
+            reasoning={"effort": reasoning_effort},
+            verbosity=verbosity_level,
+        )
         
         # Create agent
         agent = Agent(

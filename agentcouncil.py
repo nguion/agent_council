@@ -157,7 +157,13 @@ async def main_async():
         )
 
     # Display Individual Results (TLDR only for terminal)
+    if "error" in final_results:
+        console.print(Panel(f"[red]Execution failed:[/red]\n{final_results['error']}", title="Failure"))
+        return
     execution_results = final_results.get('execution_results', [])
+    if not execution_results:
+        console.print(Panel("[red]No execution results produced.[/red]", title="Failure"))
+        return
     console.print("\n[bold]Step 4 Results (TLDRs):[/bold]")
     for res in execution_results:
         status_color = "green" if res['status'] == 'success' else "red"
@@ -231,6 +237,9 @@ async def main_async():
     output_file = "council_session_complete.json"
     with open(output_file, 'w') as f:
         json.dump(final_results, f, indent=2)
+    
+    # Persist summary at end of session log
+    logger.finalize()
     
     console.print(f"\n[bold]Complete session results saved to:[/bold] [cyan]{output_file}[/cyan]")
     console.print(f"[bold]LLM token usage:[/bold] {logger.summary()}")
