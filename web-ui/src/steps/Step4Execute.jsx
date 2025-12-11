@@ -38,15 +38,18 @@ export const Step4Execute = () => {
   
   const startExecution = async (force = false) => {
     try {
+      setResults(null);
+      setAgentStatuses({});
       setStatus('starting');
       setError(null);
       
-      const response = await agentCouncilAPI.executeCouncil(sessionId);
+      const response = await agentCouncilAPI.executeCouncil(sessionId, force);
       
       // Check if execution was already done
       if (response.status === 'already_executed' && !force) {
-        setError('Execution already completed. Reload the page or click "Re-run Execution" to run again.');
-        setStatus('error');
+        setStatus('completed');
+        const resultsData = await agentCouncilAPI.getResults(sessionId);
+        setResults(resultsData);
         await refreshSession();
         return;
       }
@@ -77,7 +80,7 @@ export const Step4Execute = () => {
             clearInterval(pollingInterval.current);
             pollingInterval.current = null;
             stopPolling();
-            setError('Execution encountered an error. Please check the logs and try again.');
+            setError(statusData.execution_error || 'Execution encountered an error. Please check the logs and try again.');
             setStatus('error');
           }
         } catch (err) {
@@ -149,7 +152,7 @@ export const Step4Execute = () => {
             </h3>
             <p className="text-gray-600 mb-8">{error}</p>
             <div className="flex justify-center">
-              <Button onClick={() => startExecution()}>
+              <Button onClick={() => startExecution(true)}>
                 Try Again
               </Button>
             </div>
@@ -213,7 +216,7 @@ export const Step4Execute = () => {
               All agents have completed their analysis. Review their responses below.
             </p>
           </div>
-          <div className="text-right flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
             <div className="text-sm text-gray-500">
               {results?.execution_results?.filter(r => r.status === 'success').length || 0} succeeded,{' '}
               {results?.execution_results?.filter(r => r.status === 'error').length || 0} failed
@@ -225,11 +228,15 @@ export const Step4Execute = () => {
                 if (window.confirm('This will re-run the entire council execution. Continue?')) {
                   setStatus('idle');
                   setResults(null);
+                  startExecution(true);
                 }
               }}
             >
               <RefreshCw className="h-4 w-4 mr-1" />
               Re-run Execution
+            </Button>
+            <Button onClick={() => navigate(`/sessions/${sessionId}/review`)}>
+              Continue to Peer Review →
             </Button>
           </div>
         </div>
@@ -310,15 +317,6 @@ export const Step4Execute = () => {
             </div>
           </Card>
         ))}
-      </div>
-      
-      {/* Actions */}
-      <div className="bg-white rounded-lg shadow-md border-2 border-primary-200 p-6">
-        <div className="flex justify-end">
-          <Button onClick={() => navigate(`/sessions/${sessionId}/review`)}>
-            Run Peer Review →
-          </Button>
-        </div>
       </div>
       
       {/* Full Response Modal */}

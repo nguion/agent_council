@@ -39,10 +39,11 @@ export const SessionLayout = () => {
     if (path.includes('/edit')) return 'edit';
     if (path.includes('/execute')) return 'execute';
     if (path.includes('/review')) return 'review';
+    if (path.includes('/synthesize')) return 'synthesize';
     return 'input';
   };
 
-  const stepOrder = ['input', 'build', 'edit', 'execute', 'review'];
+  const stepOrder = ['input', 'build', 'edit', 'execute', 'review', 'synthesize'];
 
   const stepPaths = {
     input: '/',
@@ -50,6 +51,7 @@ export const SessionLayout = () => {
     edit: sessionId ? `/sessions/${sessionId}/edit` : '/',
     execute: sessionId ? `/sessions/${sessionId}/execute` : '/',
     review: sessionId ? `/sessions/${sessionId}/review` : '/',
+    synthesize: sessionId ? `/sessions/${sessionId}/synthesize` : '/',
   };
 
   const computeAllowedSteps = () => {
@@ -71,8 +73,15 @@ export const SessionLayout = () => {
     if (sessionData?.execution_results) {
       highestIndex = Math.max(highestIndex, stepOrder.indexOf('execute'));
     }
-    if (sessionData?.peer_reviews || sessionData?.chairman_verdict) {
-      highestIndex = Math.max(highestIndex, stepOrder.indexOf('review'));
+    if (sessionData?.peer_reviews) {
+      highestIndex = Math.max(
+        highestIndex,
+        stepOrder.indexOf('review'),
+        stepOrder.indexOf('synthesize')
+      );
+    }
+    if (sessionData?.chairman_verdict) {
+      highestIndex = Math.max(highestIndex, stepOrder.indexOf('synthesize'));
     }
 
     // Always include the current route's step

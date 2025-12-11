@@ -61,3 +61,4 @@
 - Batching: progress writes coalesced per session (~350ms) to reduce write pressure.
 - Reads: always prefer DB when `DATABASE_URL` is set; file used only as legacy fallback.
 - Keep uploads/logs on filesystem; only state moves to Postgres.
+

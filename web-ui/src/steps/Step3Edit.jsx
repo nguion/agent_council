@@ -88,24 +88,32 @@ export const Step3Edit = () => {
   
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">
-          Edit Your Council
-        </h2>
-        <p className="text-gray-600">
-          Refine the agents, adjust their personas, or add new members before execution.
-        </p>
-        <div className="mt-4 flex items-center space-x-4">
-          <span className="text-sm text-gray-500">
-            {councilConfig.agents.length} agent(s)
-          </span>
-          {councilConfig.agents.length === 0 && (
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
-              <AlertCircle className="h-4 w-4 mr-1" />
-              Council is empty
+      <div className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">
+            Edit Your Council
+          </h2>
+          <p className="text-gray-600">
+            Refine the agents, adjust their personas, or add new members before execution.
+          </p>
+          <div className="mt-4 flex items-center space-x-4">
+            <span className="text-sm text-gray-500">
+              {councilConfig.agents.length} agent(s)
             </span>
-          )}
+            {councilConfig.agents.length === 0 && (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
+                <AlertCircle className="h-4 w-4 mr-1" />
+                Council is empty
+              </span>
+            )}
+          </div>
         </div>
+        <Button 
+          onClick={handleContinue} 
+          disabled={councilConfig.agents.length === 0 || loading}
+        >
+          {loading ? 'Saving...' : 'Continue to Execute →'}
+        </Button>
       </div>
       
       {/* Agent List */}
@@ -238,19 +246,7 @@ export const Step3Edit = () => {
           </div>
         </div>
       )}
-      
-      {/* Actions */}
-      <div className="bg-white rounded-lg shadow-md border-2 border-primary-200 p-6">
-        <div className="flex justify-end">
-          <Button 
-            onClick={handleContinue} 
-            disabled={councilConfig.agents.length === 0 || loading}
-          >
-            {loading ? 'Saving...' : 'Save & Execute Council →'}
-          </Button>
-        </div>
-      </div>
-      
+     
       {/* Add Agent Modal */}
       {showAddModal && (
         <AddAgentModal

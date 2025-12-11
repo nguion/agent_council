@@ -9,6 +9,7 @@ import { Step2Build } from './steps/Step2Build';
 import { Step3Edit } from './steps/Step3Edit';
 import { Step4Execute } from './steps/Step4Execute';
 import { Step5Review } from './steps/Step5Review';
+import { Step6Synthesize } from './steps/Step6Synthesize';
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
             <Route path="edit" element={<Step3Edit />} />
             <Route path="execute" element={<Step4Execute />} />
             <Route path="review" element={<Step5Review />} />
+            <Route path="synthesize" element={<Step6Synthesize />} />
           </Route>
         </Routes>
       </div>

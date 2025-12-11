@@ -1,9 +1,10 @@
 {
   "db_container": "2062e16070aa",
   "database_url": "postgresql+asyncpg://postgres:agentpwd@localhost:5432/agent_council",
-  "backend_pid": 91638,
-  "frontend_pid": 91639,
-  "started_at": 1765420367.581824,
+  "db_mode": "container",
+  "backend_pid": 43315,
+  "frontend_pid": 43316,
+  "started_at": 1765480898.121334,
   "logs": {
     "backend": "/Users/nguion/Desktop/Agent_Council/.agentcouncil/backend.log",
     "frontend": "/Users/nguion/Desktop/Agent_Council/.agentcouncil/frontend.log"

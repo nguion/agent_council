@@ -6,6 +6,7 @@ const steps = [
   { id: 3, name: 'Edit', key: 'edit' },
   { id: 4, name: 'Execute', key: 'execute' },
   { id: 5, name: 'Review', key: 'review' },
+  { id: 6, name: 'Synthesize', key: 'synthesize' },
 ];
 
 export const Stepper = ({ currentStep, allowedSteps = [], onStepSelect }) => {

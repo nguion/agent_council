@@ -47,8 +47,12 @@ export const agentCouncilAPI = {
   },
 
   // Council building
-  async buildCouncil(sessionId) {
-    const response = await api.post(`/api/sessions/${sessionId}/build_council`);
+  async buildCouncil(sessionId, force = false) {
+    const response = await api.post(
+      `/api/sessions/${sessionId}/build_council`,
+      null,
+      { params: { force } }
+    );
     return response.data;
   },
 
@@ -58,8 +62,12 @@ export const agentCouncilAPI = {
   },
 
   // Execution
-  async executeCouncil(sessionId) {
-    const response = await api.post(`/api/sessions/${sessionId}/execute`);
+  async executeCouncil(sessionId, force = false) {
+    const response = await api.post(
+      `/api/sessions/${sessionId}/execute`,
+      null,
+      { params: { force } }
+    );
     return response.data;
   },
 
@@ -69,8 +77,12 @@ export const agentCouncilAPI = {
   },
 
   // Peer review
-  async startPeerReview(sessionId) {
-    const response = await api.post(`/api/sessions/${sessionId}/peer_review`);
+  async startPeerReview(sessionId, force = false) {
+    const response = await api.post(
+      `/api/sessions/${sessionId}/peer_review`,
+      null,
+      { params: { force } }
+    );
     return response.data;
   },
 
@@ -80,8 +92,12 @@ export const agentCouncilAPI = {
   },
 
   // Chairman synthesis
-  async synthesize(sessionId) {
-    const response = await api.post(`/api/sessions/${sessionId}/synthesize`);
+  async synthesize(sessionId, force = false) {
+    const response = await api.post(
+      `/api/sessions/${sessionId}/synthesize`,
+      null,
+      { params: { force } }
+    );
     return response.data;
   },
 

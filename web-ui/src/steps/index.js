@@ -3,3 +3,4 @@ export { Step2Build } from './Step2Build';
 export { Step3Edit } from './Step3Edit';
 export { Step4Execute } from './Step4Execute';
 export { Step5Review } from './Step5Review';
+export { Step6Synthesize } from './Step6Synthesize';

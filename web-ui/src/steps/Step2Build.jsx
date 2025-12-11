@@ -24,12 +24,12 @@ export const Step2Build = () => {
     }
   }, [sessionData, sessionId]);
   
-  const buildCouncil = async () => {
+  const buildCouncil = async (force = false) => {
     try {
       setLoading(true);
       setError(null);
       
-      const config = await agentCouncilAPI.buildCouncil(sessionId);
+      const config = await agentCouncilAPI.buildCouncil(sessionId, force);
       
       if (config.error) {
         setError(config.error);
@@ -90,18 +90,35 @@ export const Step2Build = () => {
   
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">
-          {councilConfig?.council_name || 'Your Council'}
-        </h2>
-        <p className="text-gray-600">
-          {councilConfig?.strategy_summary}
-        </p>
-        <div className="mt-4">
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-primary-100 text-primary-800">
-            <Users className="h-4 w-4 mr-1" />
-            {councilConfig?.agents?.length || 0} agents proposed
-          </span>
+      <div className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">
+            {councilConfig?.council_name || 'Your Council'}
+          </h2>
+          <p className="text-gray-600">
+            {councilConfig?.strategy_summary}
+          </p>
+          <div className="mt-4">
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-primary-100 text-primary-800">
+              <Users className="h-4 w-4 mr-1" />
+              {councilConfig?.agents?.length || 0} agents proposed
+            </span>
+          </div>
+        </div>
+        <div className="flex items-start space-x-3">
+          <Button
+            variant="secondary"
+            onClick={() => buildCouncil(true)}
+            disabled={loading}
+          >
+            Rebuild (Force)
+          </Button>
+          <Button
+            onClick={() => navigate(`/sessions/${sessionId}/edit`)}
+            disabled={!councilConfig || loading}
+          >
+            Continue to Edit →
+          </Button>
         </div>
       </div>
       
@@ -165,17 +182,6 @@ export const Step2Build = () => {
         </div>
       )}
       
-      {/* Actions */}
-      <div className="bg-white rounded-lg shadow-md border-2 border-primary-200 p-6">
-        <div className="flex justify-start">
-          <Button
-            onClick={() => navigate(`/sessions/${sessionId}/edit`)}
-            disabled={!councilConfig}
-          >
-            Review & Edit Council →
-          </Button>
-        </div>
-      </div>
     </div>
   );
 };

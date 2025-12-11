@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useOutletContext } from 'react-router-dom';
-import { Loader2, Award, Download, Copy, ChevronDown, ChevronUp } from 'lucide-react';
+import { useNavigate, useParams, useOutletContext } from 'react-router-dom';
+import { Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import ReactMarkdown from 'react-markdown';
@@ -8,14 +8,13 @@ import { agentCouncilAPI } from '../api';
 
 export const Step5Review = () => {
   const { sessionId } = useParams();
+  const navigate = useNavigate();
   const { sessionData, startPolling, stopPolling, refreshSession } = useOutletContext();
   
   const [reviewStatus, setReviewStatus] = useState('idle');
   const [reviews, setReviews] = useState(null);
   const [aggregatedScores, setAggregatedScores] = useState(null);
   const [reviewStatuses, setReviewStatuses] = useState({});
-  const [verdictStatus, setVerdictStatus] = useState('idle');
-  const [verdict, setVerdict] = useState(null);
   const [expandedProposal, setExpandedProposal] = useState(null);
   const [error, setError] = useState(null);
   const pollingInterval = useRef(null);
@@ -27,12 +26,6 @@ export const Step5Review = () => {
       setAggregatedScores(sessionData.aggregated_scores || {});
       setReviewStatus('completed');
       stopPolling();
-    }
-    
-    // Check if verdict already exists
-    if (sessionData?.chairman_verdict) {
-      setVerdict(sessionData.chairman_verdict);
-      setVerdictStatus('completed');
     }
   }, [sessionData]);
   
@@ -50,12 +43,15 @@ export const Step5Review = () => {
       setReviewStatus('starting');
       setError(null);
       
-      const response = await agentCouncilAPI.startPeerReview(sessionId);
+      const response = await agentCouncilAPI.startPeerReview(sessionId, force);
       
       // Check if review was already done
       if (response.status === 'already_reviewed' && !force) {
-        setError('Peer review already completed. Reload the page to see results.');
-        setReviewStatus('error');
+        const reviewData = await agentCouncilAPI.getReviews(sessionId);
+        setReviews(reviewData.reviews);
+        setAggregatedScores(reviewData.aggregated_scores);
+        setReviewStatus('completed');
+        setError('Peer review already completed. You can proceed to synthesis or re-run the review.');
         await refreshSession();
         return;
       }
@@ -83,6 +79,7 @@ export const Step5Review = () => {
             
             // Refresh session data
             await refreshSession();
+            // If synthesis is next, encourage navigation
           } else if (statusData.status === 'review_error') {
             clearInterval(pollingInterval.current);
             pollingInterval.current = null;
@@ -98,7 +95,12 @@ export const Step5Review = () => {
       
     } catch (err) {
       console.error('Start peer review error:', err);
-      const errorMessage = err.response?.data?.detail || err.message || 'Failed to start peer review';
+      const rawDetail = err.response?.data?.detail || err.message || 'Failed to start peer review';
+      const errorMessage = Array.isArray(rawDetail)
+        ? rawDetail.map((d) => d?.msg || JSON.stringify(d)).join('; ')
+        : typeof rawDetail === 'object'
+        ? JSON.stringify(rawDetail)
+        : rawDetail;
       setError(errorMessage);
       setReviewStatus('error');
       if (pollingInterval.current) {
@@ -109,49 +111,32 @@ export const Step5Review = () => {
     }
   };
   
-  const startSynthesis = async (force = false) => {
-    try {
-      setVerdictStatus('synthesizing');
-      setError(null);
-      
-      const result = await agentCouncilAPI.synthesize(sessionId);
-      
-      setVerdict(result.verdict);
-      setVerdictStatus('completed');
-      
-      // Refresh session data to update sidebar
-      await refreshSession();
-      
-    } catch (err) {
-      console.error('Synthesis error:', err);
-      const errorMessage = err.response?.data?.detail || err.message || 'Failed to synthesize verdict';
-      setError(errorMessage);
-      setVerdictStatus('error');
-    }
+  const goToSynthesize = () => {
+    setError(null);
+    navigate(`/sessions/${sessionId}/synthesize`);
   };
   
-  const downloadSession = async () => {
-    try {
-      const summary = await agentCouncilAPI.getSummary(sessionId);
-      
-      const blob = new Blob([JSON.stringify(summary, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `council_session_${sessionId}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      alert('Failed to download session: ' + err.message);
-    }
-  };
-  
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
-  };
-  
+  // Require execution results before peer review
+  if (!sessionData?.execution_results) {
+    return (
+      <div className="max-w-4xl mx-auto py-12 px-4">
+        <Card>
+          <div className="text-center py-12">
+            <h3 className="text-2xl font-semibold text-gray-900 mb-4">
+              Execution Required
+            </h3>
+            <p className="text-gray-600 mb-8">
+              Run the council execution before starting peer review.
+            </p>
+            <Button onClick={() => navigate(`/sessions/${sessionId}/execute`)}>
+              Go to Execute
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   // Start peer review state
   if (reviewStatus === 'idle') {
     return (
@@ -165,8 +150,33 @@ export const Step5Review = () => {
               Each agent will now review the proposals from their peers and provide structured critiques.
             </p>
             <div className="flex justify-center">
-              <Button onClick={startPeerReview}>
+              <Button onClick={() => startPeerReview()}>
                 Start Peer Review
+              </Button>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (reviewStatus === 'error') {
+    return (
+      <div className="max-w-4xl mx-auto py-12 px-4">
+        <Card>
+          <div className="text-center py-12">
+            <h3 className="text-2xl font-semibold text-gray-900 mb-3">
+              Peer Review Failed
+            </h3>
+            <p className="text-gray-600 mb-6">
+              {error || 'Peer review encountered an issue. You can retry the review or return to execution results.'}
+            </p>
+            <div className="flex justify-center space-x-3">
+              <Button onClick={() => startPeerReview(true)}>
+                Retry Review
+              </Button>
+              <Button variant="secondary" onClick={() => navigate(`/sessions/${sessionId}/execute`)}>
+                Back to Execution
               </Button>
             </div>
           </div>
@@ -210,13 +220,23 @@ export const Step5Review = () => {
   // Reviews complete, show scores and verdict
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">
-          Peer Review Complete
-        </h2>
-        <p className="text-gray-600">
-          {reviews?.length || 0} critiques generated
-        </p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">
+            Peer Review Complete
+          </h2>
+          <p className="text-gray-600">
+            {reviews?.length || 0} critiques generated
+          </p>
+        </div>
+        <div className="flex space-x-3">
+          <Button variant="secondary" onClick={() => startPeerReview(true)}>
+            Re-run Review
+          </Button>
+          <Button onClick={goToSynthesize}>
+            Proceed to Synthesize →
+          </Button>
+        </div>
       </div>
       
       {/* Scores Table */}
@@ -357,85 +377,6 @@ export const Step5Review = () => {
         </Card>
       )}
       
-      {/* Chairman's Verdict */}
-      {verdictStatus === 'idle' && (
-        <div className="flex justify-center mb-8">
-          <Button onClick={startSynthesis}>
-            <Award className="h-5 w-5 mr-2" />
-            Generate Chairman's Verdict
-          </Button>
-        </div>
-      )}
-      
-      {verdictStatus === 'synthesizing' && (
-        <Card className="mb-8">
-          <div className="text-center py-12">
-            <Loader2 className="h-16 w-16 text-primary-600 animate-spin mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              The Chairman is synthesizing the final verdict...
-            </h3>
-            <p className="text-gray-600">
-              Integrating all proposals and peer critiques
-            </p>
-          </div>
-        </Card>
-      )}
-      
-      {verdictStatus === 'completed' && verdict && (
-        <Card title="Chairman's Final Verdict" className="mb-8">
-          <div className="prose prose-base max-w-none text-gray-900 max-h-[70vh] overflow-y-auto pr-2">
-            <ReactMarkdown
-              components={{
-                h1: ({node, ...props}) => <h1 className="text-2xl font-bold mb-4 mt-6 text-gray-900 border-b border-primary-200 pb-2" {...props} />,
-                h2: ({node, ...props}) => <h2 className="text-xl font-semibold mb-3 mt-5 text-gray-800" {...props} />,
-                h3: ({node, ...props}) => <h3 className="text-lg font-semibold mb-2 mt-4 text-gray-800" {...props} />,
-                p: ({node, ...props}) => <p className="mb-3 leading-relaxed text-gray-700" {...props} />,
-                ul: ({node, ...props}) => <ul className="mb-3 ml-5 space-y-1 list-disc [&_ul]:mt-1 [&_ul]:mb-1 [&_ul]:ml-5 [&_ul]:list-circle [&_ul_ul]:list-square" {...props} />,
-                ol: ({node, ...props}) => <ol className="mb-3 ml-5 space-y-1 list-decimal [&_ol]:mt-1 [&_ol]:mb-1 [&_ol]:ml-5 [&_ol]:list-[lower-alpha] [&_ol_ol]:list-[lower-roman]" {...props} />,
-                li: ({node, ...props}) => <li className="leading-relaxed text-gray-700 [&>ul]:mt-1 [&>ol]:mt-1" {...props} />,
-                strong: ({node, ...props}) => <strong className="font-semibold text-gray-900" {...props} />,
-                em: ({node, ...props}) => <em className="italic text-gray-800" {...props} />,
-                blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-primary-300 pl-4 py-2 my-3 italic text-gray-600 bg-gray-50 rounded-r" {...props} />,
-                code: ({node, inline, ...props}) => 
-                  inline 
-                    ? <code className="px-1.5 py-0.5 bg-gray-100 text-primary-700 rounded text-sm font-mono" {...props} />
-                    : <code className="block p-3 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm font-mono my-3" {...props} />,
-                pre: ({node, ...props}) => <pre className="my-3" {...props} />,
-                hr: ({node, ...props}) => <hr className="my-4 border-gray-200" {...props} />,
-              }}
-            >
-              {verdict}
-            </ReactMarkdown>
-          </div>
-          <div className="mt-6 pt-4 border-t border-gray-200 flex space-x-4">
-            <Button
-              variant="secondary"
-              onClick={() => copyToClipboard(verdict)}
-            >
-              <Copy className="h-4 w-4 mr-1" />
-              Copy Verdict
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={downloadSession}
-            >
-              <Download className="h-4 w-4 mr-1" />
-              Download Full Session
-            </Button>
-          </div>
-        </Card>
-      )}
-      
-      {/* Completion Badge */}
-      <div className="bg-white rounded-lg shadow-md border-2 border-primary-200 p-6">
-        <div className="flex items-center justify-end gap-3">
-            {verdictStatus === 'completed' && (
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800 whitespace-nowrap">
-                ✓ Session Complete
-              </span>
-            )}
-        </div>
-      </div>
     </div>
   );
 };

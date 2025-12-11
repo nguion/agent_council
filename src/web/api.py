@@ -380,9 +380,15 @@ async def build_council(
                 session_id,
                 {
                     "execution_results": None,
+                    "execution_status": {},
+                    "execution_error": None,
                     "peer_reviews": None,
                     "aggregated_scores": None,
-                    "chairman_verdict": None
+                    "review_status": {},
+                    "review_error": None,
+                    "chairman_verdict": None,
+                    "status": "build_in_progress",
+                    "current_step": "build"
                 },
                 db=db,
                 user_id=current_user.id
@@ -409,6 +415,7 @@ async def build_council(
             {
                 "council_config": council_config,
                 "current_step": "edit",
+                "status": "build_complete",
                 "tokens": tokens
             },
             db=db,
@@ -421,6 +428,7 @@ async def build_council(
             session_id,
             {
                 "current_step": "edit",
+                "status": "build_complete",
                 "last_cost_usd": tokens.get("total_cost_usd"),
                 "last_total_tokens": tokens.get("total_tokens")
             }
@@ -466,7 +474,16 @@ async def update_council(
             session_id,
             {
                 "council_config": council_config.dict(),
-                "current_step": "execute"
+                "execution_results": None,
+                "execution_status": {},
+                "execution_error": None,
+                "peer_reviews": None,
+                "aggregated_scores": None,
+                "review_status": {},
+                "review_error": None,
+                "chairman_verdict": None,
+                "current_step": "execute",
+                "status": "ready_to_execute"
             },
             db=db,
             user_id=current_user.id
@@ -476,7 +493,10 @@ async def update_council(
         await SessionService.update_session_metadata(
             db,
             session_id,
-            {"current_step": "execute"}
+            {
+                "current_step": "execute",
+                "status": "ready_to_execute"
+            }
         )
         
         return {"status": "success", "message": "Council configuration updated"}
@@ -635,6 +655,8 @@ async def execute_council(
                         "execution_error": None,
                         "peer_reviews": None,
                         "aggregated_scores": None,
+                        "review_status": {},
+                        "review_error": None,
                         "chairman_verdict": None
                     },
                     db=db,
@@ -713,6 +735,8 @@ async def get_status(
             "current_step": state.get("current_step", "unknown"),
             "execution_status": state.get("execution_status", {}),
             "review_status": state.get("review_status", {}),
+            "execution_error": state.get("execution_error"),
+            "review_error": state.get("review_error"),
             "progress": {
                 "execution": state.get("execution_status", {}),
                 "review": state.get("review_status", {})
