@@ -1,6 +1,7 @@
 """
 Session Manager Module.
-Handles file-based persistence of session state for the web application.
+Handles filesystem operations for session data (uploads, logs, directories).
+State management is now handled by SessionStateService (database-backed).
 """
 
 import os
@@ -13,7 +14,12 @@ from pathlib import Path
 
 
 class SessionManager:
-    """Manages session persistence using file-based storage."""
+    """
+    Manages session filesystem operations (uploads, logs, directories).
+    
+    Note: Session state is now managed by SessionStateService in the database.
+    This class focuses on file artifacts like uploads and logs.
+    """
     
     def __init__(self, sessions_dir: str = "sessions"):
         """
@@ -25,109 +31,41 @@ class SessionManager:
         self.sessions_dir = Path(sessions_dir)
         self.sessions_dir.mkdir(exist_ok=True)
     
+    @staticmethod
+    def generate_session_id() -> str:
+        """
+        Generate a unique session identifier.
+        
+        Returns:
+            Unique session ID string
+        """
+        return f"session_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+    
     def _get_session_dir(self, session_id: str) -> Path:
         """Get the directory path for a session."""
         return self.sessions_dir / session_id
-    
-    def _get_state_file(self, session_id: str) -> Path:
-        """Get the state.json file path for a session."""
-        return self._get_session_dir(session_id) / "state.json"
     
     def _get_uploads_dir(self, session_id: str) -> Path:
         """Get the uploads directory for a session."""
         return self._get_session_dir(session_id) / "uploaded_files"
     
-    def create_session(self, question: str) -> str:
+    def ensure_session_directories(self, session_id: str):
         """
-        Create a new session.
+        Ensure session directories exist.
         
         Args:
-            question: The user's initial question
-            
-        Returns:
-            session_id: Unique identifier for the session
+            session_id: Session identifier
         """
-        session_id = f"session_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
         session_dir = self._get_session_dir(session_id)
         session_dir.mkdir(parents=True, exist_ok=True)
         
         # Create uploads directory
         uploads_dir = self._get_uploads_dir(session_id)
         uploads_dir.mkdir(exist_ok=True)
-        
-        # Initialize state
-        initial_state = {
-            "session_id": session_id,
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
-            "current_step": "input",
-            "question": question,
-            "context_files": [],
-            "ingested_data": [],
-            "council_config": None,
-            "execution_results": None,
-            "peer_reviews": None,
-            "chairman_verdict": None,
-            "execution_status": {},
-            "review_status": {},
-            "tokens": {},
-            "log_file": None
-        }
-        
-        self._save_state(session_id, initial_state)
-        return session_id
     
-    def session_exists(self, session_id: str) -> bool:
-        """Check if a session exists."""
+    def session_directory_exists(self, session_id: str) -> bool:
+        """Check if a session directory exists on filesystem."""
         return self._get_session_dir(session_id).exists()
-    
-    def get_state(self, session_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Get the current state of a session.
-        
-        Args:
-            session_id: The session identifier
-            
-        Returns:
-            The session state dict, or None if not found
-        """
-        state_file = self._get_state_file(session_id)
-        if not state_file.exists():
-            return None
-        
-        try:
-            with open(state_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"Error loading state for session {session_id}: {e}")
-            return None
-    
-    def _save_state(self, session_id: str, state: Dict[str, Any]):
-        """Save the session state."""
-        state["updated_at"] = datetime.utcnow().isoformat()
-        state_file = self._get_state_file(session_id)
-        
-        try:
-            with open(state_file, 'w', encoding='utf-8') as f:
-                json.dump(state, f, indent=2)
-        except Exception as e:
-            print(f"Error saving state for session {session_id}: {e}")
-            raise
-    
-    def update_state(self, session_id: str, updates: Dict[str, Any]):
-        """
-        Update specific fields in the session state.
-        
-        Args:
-            session_id: The session identifier
-            updates: Dictionary of fields to update
-        """
-        state = self.get_state(session_id)
-        if state is None:
-            raise ValueError(f"Session {session_id} not found")
-        
-        state.update(updates)
-        self._save_state(session_id, state)
     
     def save_uploaded_file(self, session_id: str, filename: str, content: bytes) -> str:
         """
@@ -161,31 +99,75 @@ class SessionManager:
         return [str(f) for f in uploads_dir.iterdir() if f.is_file()]
     
     def delete_session(self, session_id: str):
-        """Delete a session and all its data."""
+        """
+        Delete a session's filesystem data (uploads, logs, etc.).
+        Note: This does not delete database state - use SessionService for that.
+        
+        Args:
+            session_id: Session identifier
+        """
         session_dir = self._get_session_dir(session_id)
         if session_dir.exists():
             shutil.rmtree(session_dir)
     
-    def list_sessions(self) -> List[Dict[str, Any]]:
+    def get_state(self, session_id: str) -> Optional[Dict[str, Any]]:
         """
-        List all sessions with basic metadata.
+        Get session state from state.json file.
+        Used for background tasks to avoid database lock contention.
         
+        Args:
+            session_id: Session identifier
+            
         Returns:
-            List of dicts with session info
+            State dict or None if not found
         """
-        sessions = []
-        for session_dir in self.sessions_dir.iterdir():
-            if session_dir.is_dir():
-                state = self.get_state(session_dir.name)
-                if state:
-                    sessions.append({
-                        "session_id": state["session_id"],
-                        "created_at": state["created_at"],
-                        "updated_at": state["updated_at"],
-                        "current_step": state.get("current_step", "unknown"),
-                        "question": state.get("question", "")[:100]  # Truncate for listing
-                    })
+        state_file = self._get_session_dir(session_id) / "state.json"
+        if not state_file.exists():
+            return None
         
-        # Sort by creation time, newest first
-        sessions.sort(key=lambda x: x["created_at"], reverse=True)
-        return sessions
+        try:
+            with open(state_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error reading state for {session_id}: {e}")
+            return None
+    
+    def update_state(self, session_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Update session state in state.json file.
+        Used for background tasks to avoid database lock contention.
+        
+        Args:
+            session_id: Session identifier
+            updates: Dictionary of fields to update
+            
+        Returns:
+            Updated state dict
+        """
+        state_file = self._get_session_dir(session_id) / "state.json"
+        
+        # Load current state or create new
+        if state_file.exists():
+            with open(state_file, 'r', encoding='utf-8') as f:
+                state = json.load(f)
+        else:
+            state = {
+                "session_id": session_id,
+                "created_at": datetime.utcnow().isoformat()
+            }
+        
+        # Merge updates (deep merge for nested dicts)
+        for key, value in updates.items():
+            if key in state and isinstance(state[key], dict) and isinstance(value, dict):
+                # Merge nested dicts
+                state[key] = {**state[key], **value}
+            else:
+                state[key] = value
+        
+        state["updated_at"] = datetime.utcnow().isoformat()
+        
+        # Write back to file
+        with open(state_file, 'w', encoding='utf-8') as f:
+            json.dump(state, f, indent=2, ensure_ascii=False)
+        
+        return state

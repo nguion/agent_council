@@ -28,6 +28,7 @@ build/
 *.swp
 *.swo
 *~
+.cursor/
 
 # Project specific - generated files
 council_session_results.json
@@ -37,7 +38,27 @@ council_session_complete.json
 *.log
 logs/
 
+# Database
+*.db
+*.db-shm
+*.db-wal
+*.db.backup
+
+# Sessions (keep the directory but ignore content)
+sessions/*
+!sessions/.gitkeep
+
+# Testing
+.pytest_cache/
+tests_run/
+.coverage
+htmlcov/
+
 # OS
 .DS_Store
 Thumbs.db
 
+# Web UI (if not covered by web-ui/.gitignore)
+web-ui/node_modules/
+web-ui/dist/
+web-ui/.env

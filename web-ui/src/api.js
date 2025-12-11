@@ -84,6 +84,14 @@ export const agentCouncilAPI = {
     const response = await api.post(`/api/sessions/${sessionId}/synthesize`);
     return response.data;
   },
+
+  // Session management
+  async deleteSession(sessionId, hard = false) {
+    const response = await api.delete(`/api/sessions/${sessionId}`, {
+      params: { hard }
+    });
+    return response.data;
+  },
 };
 
 export default api;

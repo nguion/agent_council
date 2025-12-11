@@ -1,10 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
 import { Loader2, Award, Download, Copy, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import ReactMarkdown from 'react-markdown';
+import { agentCouncilAPI } from '../api';
 
-export const Step5Review = ({ sessionId, onBack }) => {
+export const Step5Review = () => {
+  const { sessionId } = useParams();
+  const navigate = useNavigate();
+  const { sessionData, startPolling, stopPolling, refreshSession } = useOutletContext();
+  
   const [reviewStatus, setReviewStatus] = useState('idle');
   const [reviews, setReviews] = useState(null);
   const [aggregatedScores, setAggregatedScores] = useState(null);
@@ -16,22 +22,49 @@ export const Step5Review = ({ sessionId, onBack }) => {
   const pollingInterval = useRef(null);
   
   useEffect(() => {
+    // Check if peer reviews already exist
+    if (sessionData?.peer_reviews) {
+      setReviews(sessionData.peer_reviews);
+      setAggregatedScores(sessionData.aggregated_scores || {});
+      setReviewStatus('completed');
+      stopPolling();
+    }
+    
+    // Check if verdict already exists
+    if (sessionData?.chairman_verdict) {
+      setVerdict(sessionData.chairman_verdict);
+      setVerdictStatus('completed');
+    }
+  }, [sessionData]);
+  
+  useEffect(() => {
     return () => {
       if (pollingInterval.current) {
         clearInterval(pollingInterval.current);
       }
+      stopPolling();
     };
   }, []);
   
-  const startPeerReview = async () => {
+  const startPeerReview = async (force = false) => {
     try {
       setReviewStatus('starting');
       setError(null);
       
-      const { agentCouncilAPI } = await import('../api');
-      await agentCouncilAPI.startPeerReview(sessionId);
+      const response = await agentCouncilAPI.startPeerReview(sessionId);
+      
+      // Check if review was already done
+      if (response.status === 'already_reviewed' && !force) {
+        setError('Peer review already completed. Reload the page to see results.');
+        setReviewStatus('error');
+        await refreshSession();
+        return;
+      }
       
       setReviewStatus('reviewing');
+      
+      // Start controlled polling
+      startPolling();
       
       // Poll for review status
       pollingInterval.current = setInterval(async () => {
@@ -41,42 +74,65 @@ export const Step5Review = ({ sessionId, onBack }) => {
           
           if (statusData.status === 'review_complete') {
             clearInterval(pollingInterval.current);
+            pollingInterval.current = null;
+            stopPolling();
+            
             const reviewData = await agentCouncilAPI.getReviews(sessionId);
             setReviews(reviewData.reviews);
             setAggregatedScores(reviewData.aggregated_scores);
             setReviewStatus('completed');
+            
+            // Refresh session data
+            await refreshSession();
+          } else if (statusData.status === 'review_error') {
+            clearInterval(pollingInterval.current);
+            pollingInterval.current = null;
+            stopPolling();
+            setError('Peer review encountered an error. Please check the logs and try again.');
+            setReviewStatus('error');
           }
         } catch (err) {
           console.error('Polling error:', err);
+          // Don't stop polling on transient errors
         }
       }, 1500);
       
     } catch (err) {
-      setError(err.message || 'Failed to start peer review');
+      console.error('Start peer review error:', err);
+      const errorMessage = err.response?.data?.detail || err.message || 'Failed to start peer review';
+      setError(errorMessage);
       setReviewStatus('error');
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current);
+        pollingInterval.current = null;
+      }
+      stopPolling();
     }
   };
   
-  const startSynthesis = async () => {
+  const startSynthesis = async (force = false) => {
     try {
       setVerdictStatus('synthesizing');
       setError(null);
       
-      const { agentCouncilAPI } = await import('../api');
       const result = await agentCouncilAPI.synthesize(sessionId);
       
       setVerdict(result.verdict);
       setVerdictStatus('completed');
       
+      // Refresh session data to update sidebar
+      await refreshSession();
+      
     } catch (err) {
-      setError(err.message || 'Failed to synthesize verdict');
+      console.error('Synthesis error:', err);
+      const errorMessage = err.response?.data?.detail || err.message || 'Failed to synthesize verdict';
+      setError(errorMessage);
       setVerdictStatus('error');
     }
   };
   
   const downloadSession = async () => {
     try {
-      const { agentCouncilAPI } = await import('../api');
       const summary = await agentCouncilAPI.getSummary(sessionId);
       
       const blob = new Blob([JSON.stringify(summary, null, 2)], { type: 'application/json' });
@@ -110,7 +166,7 @@ export const Step5Review = ({ sessionId, onBack }) => {
               Each agent will now review the proposals from their peers and provide structured critiques.
             </p>
             <div className="flex justify-center space-x-4">
-              <Button variant="secondary" onClick={onBack}>
+              <Button variant="secondary" onClick={() => navigate(`/sessions/${sessionId}/execute`)}>
                 Back to Results
               </Button>
               <Button onClick={startPeerReview}>
@@ -377,16 +433,19 @@ export const Step5Review = ({ sessionId, onBack }) => {
       {/* Bottom Actions */}
       <div className="bg-white rounded-lg shadow-md border-2 border-primary-200 p-6">
         <div className="flex justify-between items-center">
-          <Button variant="secondary" onClick={onBack}>
+          <Button variant="secondary" onClick={() => navigate(`/sessions/${sessionId}/execute`)}>
             ← Back to Execution
           </Button>
+          <div className="flex items-center space-x-4">
           {verdictStatus === 'completed' && (
-            <div className="flex items-center space-x-2">
               <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
                 ✓ Session Complete
               </span>
+            )}
+            <Button variant="secondary" onClick={() => navigate('/sessions')}>
+              View All Sessions
+            </Button>
             </div>
-          )}
         </div>
       </div>
     </div>

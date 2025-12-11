@@ -4,15 +4,20 @@ FastAPI Application for Agent Council Web Interface.
 
 import asyncio
 import os
+from datetime import datetime
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, BackgroundTasks
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, BackgroundTasks, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 from pathlib import Path
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .session_manager import SessionManager
 from .services import AgentCouncilService
+from .database import get_db, init_db, AsyncSessionLocal, User, Session as DBSession
+from .db_service import UserService, SessionService
+from .state_service import SessionStateService, DatabaseBusyError
 from agent_council.utils.session_logger import SessionLogger
 
 
@@ -35,8 +40,41 @@ app.add_middleware(
 # Initialize session manager
 session_manager = SessionManager()
 
-# Global dict to track background task progress
-task_progress = {}
+
+# Database initialization on startup
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database on app startup."""
+    await init_db()
+
+
+# User context helper
+async def get_current_user(
+    db: AsyncSession = Depends(get_db),
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
+) -> User:
+    """
+    Get or create the current user from request headers.
+    
+    For development: Pass X-User-Id header (e.g., email).
+    For production: Integrate with SSO/OIDC and extract from token.
+    
+    Args:
+        db: Database session
+        x_user_id: User identifier from header
+        
+    Returns:
+        User object
+    """
+    # Default to a test user if no header provided (dev mode)
+    user_external_id = x_user_id or "dev-user@localhost"
+    
+    user = await UserService.get_or_create_user(
+        db,
+        external_id=user_external_id
+    )
+    
+    return user
 
 
 # Pydantic models
@@ -56,44 +94,90 @@ class ErrorResponse(BaseModel):
 
 
 # Helper functions
-def get_session_logger(session_id: str) -> SessionLogger:
-    """Get or create a logger for the session."""
-    state = session_manager.get_state(session_id)
-    if not state:
-        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+async def authorize_session_access(
+    session_id: str,
+    user_id: str,
+    db: AsyncSession
+) -> DBSession:
+    """
+    Authorize user access to a session.
     
+    Args:
+        session_id: Session identifier
+        user_id: User identifier
+        db: Database session
+        
+    Returns:
+        Session object if authorized
+        
+    Raises:
+        HTTPException: If session not found or user not authorized
+    """
+    db_session = await SessionService.get_session(db, session_id, user_id)
+    
+    if not db_session:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Session {session_id} not found or you don't have access"
+        )
+    
+    if db_session.is_deleted:
+        raise HTTPException(
+            status_code=410,
+            detail=f"Session {session_id} has been deleted"
+        )
+    
+    return db_session
+
+
+async def get_state_with_fallback(
+    session_id: str,
+    db: Optional[AsyncSession] = None,
+    user_id: Optional[str] = None
+):
+    """
+    Prefer file-based state.json, fall back to DB if missing.
+    """
+    state = session_manager.get_state(session_id)
+    if state:
+        return state
+    if db:
+        return await SessionStateService.get_state(db, session_id, user_id) if user_id else await SessionStateService.get_state(db, session_id)
+    return None
+
+
+async def get_session_logger(session_id: str, db: AsyncSession, update_state: bool = True) -> SessionLogger:
+    """
+    Get or create a logger for the session.
+    
+    Args:
+        session_id: Session identifier
+        db: Database session
+        update_state: If False, skip updating state (avoid DB contention in background tasks)
+    
+    Returns:
+        SessionLogger instance
+    """
     # Use the logs directory relative to session
     logs_dir = Path("sessions") / session_id / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
     
     logger = SessionLogger(output_dir=str(logs_dir))
     
-    # Save log path to state
-    session_manager.update_state(session_id, {"log_file": logger.path})
+    # Optionally save log path to state in DB
+    # Skip in background tasks to avoid DB lock contention
+    if update_state:
+        try:
+            await SessionStateService.update_state(db, session_id, {"log_file": logger.path})
+        except Exception as e:
+            # Non-critical - log file path can be inferred
+            print(f"Warning: Could not save log file path for {session_id}: {e}")
     
     return logger
 
 
-def progress_callback_factory(session_id: str, status_type: str):
-    """Factory to create progress callbacks that update session state."""
-    def callback(agent_name: str, status: str):
-        if session_id not in task_progress:
-            task_progress[session_id] = {}
-        if status_type not in task_progress[session_id]:
-            task_progress[session_id][status_type] = {}
-        
-        task_progress[session_id][status_type][agent_name] = status
-        
-        # Also update session state
-        state = session_manager.get_state(session_id)
-        if state:
-            state_key = f"{status_type}_status"
-            if state_key not in state:
-                state[state_key] = {}
-            state[state_key][agent_name] = status
-            session_manager.update_state(session_id, {state_key: state[state_key]})
-    
-    return callback
+# Progress callbacks are now defined inline in background tasks
+# using file-based state updates (no database contention)
 
 
 # Endpoints
@@ -117,7 +201,9 @@ async def health():
 @app.post("/api/sessions")
 async def create_session(
     question: str = Form(...),
-    files: List[UploadFile] = File(default=[])
+    files: List[UploadFile] = File(default=[]),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Create a new session with optional file uploads.
@@ -125,13 +211,27 @@ async def create_session(
     Args:
         question: The user's core question
         files: Optional list of context files
+        db: Database session
+        current_user: Current authenticated user
     
     Returns:
         Session ID and context file metadata
     """
     try:
-        # Create session
-        session_id = session_manager.create_session(question)
+        # Generate session ID
+        session_id = SessionManager.generate_session_id()
+        
+        # Ensure filesystem directories exist
+        session_manager.ensure_session_directories(session_id)
+        
+        # Create metadata in database
+        created_at = datetime.utcnow()
+        await SessionService.create_session_metadata(
+            db,
+            session_id=session_id,
+            user_id=current_user.id,
+            question=question
+        )
         
         # Save uploaded files
         file_paths = []
@@ -155,12 +255,24 @@ async def create_session(
                 for item in ingested_data
             ]
         
-        # Update session state
+        # Write to file-based state (primary, used by background tasks)
         session_manager.update_state(session_id, {
+            "session_id": session_id,
+            "user_id": current_user.id,
+            "question": question,
             "context_files": file_paths,
             "ingested_data": ingested_data,
-            "current_step": "build"
+            "current_step": "build",
+            "status": "idle",
+            "created_at": created_at.isoformat()
         })
+        
+        # Update database metadata (for listing/filtering only)
+        await SessionService.update_session_metadata(
+            db,
+            session_id,
+            {"current_step": "build"}
+        )
         
         return {
             "session_id": session_id,
@@ -173,25 +285,57 @@ async def create_session(
 
 
 @app.post("/api/sessions/{session_id}/build_council")
-async def build_council(session_id: str):
+async def build_council(
+    session_id: str,
+    force: bool = False,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
     Build a council configuration using the Architect agent.
     
     Args:
         session_id: The session identifier
+        force: If True, rebuild even if config exists
+        db: Database session
+        current_user: Current authenticated user
     
     Returns:
         Council configuration
     """
     try:
-        state = session_manager.get_state(session_id)
+        # Authorize access
+        await authorize_session_access(session_id, current_user.id, db)
+        
+        state = await get_state_with_fallback(session_id, db, current_user.id)
+        
         if not state:
             raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+        
+        # Validate question exists
+        if not state.get("question"):
+            raise HTTPException(status_code=400, detail="Session question is missing")
+        
+        # Check if council already exists and force is not set
+        if state.get("council_config") and not force:
+            return state["council_config"]
+        
+        # Clear any stale execution/review data on rebuild
+        if force:
+            session_manager.update_state(session_id, {
+                "execution_results": None,
+                "peer_reviews": None,
+                "aggregated_scores": None,
+                "chairman_verdict": None
+            })
         
         question = state["question"]
         ingested_data = state.get("ingested_data", [])
         
-        logger = get_session_logger(session_id)
+        # Create logger (no DB access)
+        logs_dir = Path("sessions") / session_id / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        logger = SessionLogger(output_dir=str(logs_dir))
         
         council_config = await AgentCouncilService.build_council(
             question,
@@ -199,61 +343,114 @@ async def build_council(session_id: str):
             logger=logger
         )
         
-        # Update session state
+        # Update file-based state (primary)
+        tokens = logger.get_cost_breakdown()
         session_manager.update_state(session_id, {
             "council_config": council_config,
             "current_step": "edit",
-            "tokens": logger.get_cost_breakdown()
+            "tokens": tokens
         })
+        
+        # Update database metadata (for listing/filtering)
+        await SessionService.update_session_metadata(
+            db,
+            session_id,
+            {
+                "current_step": "edit",
+                "last_cost_usd": tokens.get("total_cost_usd"),
+                "last_total_tokens": tokens.get("total_tokens")
+            }
+        )
         
         return council_config
     
+    except HTTPException:
+        raise
+    except DatabaseBusyError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=str(e)
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.put("/api/sessions/{session_id}/council")
-async def update_council(session_id: str, council_config: CouncilConfig):
+async def update_council(
+    session_id: str,
+    council_config: CouncilConfig,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
     Update the council configuration.
     
     Args:
         session_id: The session identifier
         council_config: Updated council configuration
+        db: Database session
+        current_user: Current authenticated user
     
     Returns:
         Success message
     """
     try:
-        state = session_manager.get_state(session_id)
-        if not state:
-            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+        # Authorize access
+        await authorize_session_access(session_id, current_user.id, db)
         
+        # Update file-based state (primary)
         session_manager.update_state(session_id, {
             "council_config": council_config.dict(),
             "current_step": "execute"
         })
         
+        # Update database metadata (for listing/filtering)
+        await SessionService.update_session_metadata(
+            db,
+            session_id,
+            {"current_step": "execute"}
+        )
+        
         return {"status": "success", "message": "Council configuration updated"}
     
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 async def execute_council_task(session_id: str):
-    """Background task to execute the council."""
+    """
+    Background task to execute the council.
+    Uses file-based state.json to avoid database lock contention.
+    """
+    print(f"[EXECUTE_TASK] Starting execution for {session_id}")
     try:
+        # Use file-based state for background task (avoids DB locks)
         state = session_manager.get_state(session_id)
+        if not state:
+            print(f"[EXECUTE_TASK] Error: Session {session_id} not found")
+            return
+        
+        print(f"[EXECUTE_TASK] State loaded for {session_id}, starting execution...")
+        
         council_config = state["council_config"]
         question = state["question"]
         ingested_data = state.get("ingested_data", [])
         
-        logger = get_session_logger(session_id)
+        # Create logger (no DB access needed)
+        logs_dir = Path("sessions") / session_id / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        logger = SessionLogger(output_dir=str(logs_dir))
+        print(f"[EXECUTE_TASK] Logger created for {session_id}")
         
-        # Initialize progress
-        task_progress[session_id] = {"execution": {}}
+        # Simple progress callback that writes to file
+        def progress_cb(agent_name: str, status: str):
+            session_manager.update_state(session_id, {
+                "execution_status": {agent_name: status}
+            })
         
-        progress_cb = progress_callback_factory(session_id, "execution")
+        print(f"[EXECUTE_TASK] About to execute council for {session_id}")
         
         execution_results = await AgentCouncilService.execute_council(
             council_config,
@@ -263,43 +460,174 @@ async def execute_council_task(session_id: str):
             logger=logger
         )
         
-        # Update session state
+        print(f"[EXECUTE_TASK] Execution completed for {session_id}, updating state...")
+        
+        # Update file-based state
+        tokens = logger.get_cost_breakdown()
         session_manager.update_state(session_id, {
             "execution_results": execution_results,
             "current_step": "review",
-            "tokens": logger.get_cost_breakdown()
+            "status": "execution_complete",
+            "tokens": tokens
         })
+        
+        print(f"[EXECUTE_TASK] State updated to file for {session_id}")
+        
+        # Sync status to database (single write, less critical)
+        try:
+            async with AsyncSessionLocal() as db:
+                await SessionService.update_session_metadata(db, session_id, {
+                    "current_step": "review",
+                    "status": "execution_complete",
+                    "last_cost_usd": tokens.get("total_cost_usd"),
+                    "last_total_tokens": tokens.get("total_tokens")
+                })
+                await db.commit()
+                print(f"[EXECUTE_TASK] Status synced to DB for {session_id}")
+        except Exception as e:
+            print(f"Warning: Could not sync status to DB: {e}")
         
     except Exception as e:
         print(f"Error in execute_council_task: {e}")
-        session_manager.update_state(session_id, {
-            "execution_error": str(e)
-        })
+        import traceback
+        traceback.print_exc()
+        
+        try:
+            session_manager.update_state(session_id, {
+                "execution_error": str(e),
+                "status": "execution_error"
+            })
+        except Exception as e2:
+            print(f"Error updating error state: {e2}")
 
 
 @app.post("/api/sessions/{session_id}/execute")
-async def execute_council(session_id: str, background_tasks: BackgroundTasks):
+async def execute_council(
+    session_id: str,
+    background_tasks: BackgroundTasks,
+    force: bool = False,
+    current_user: User = Depends(get_current_user)
+):
     """
     Execute the council in parallel (background task).
     
+    NOTE: Using manual DB session management to avoid auto-commit issues.
+    
     Args:
         session_id: The session identifier
+        force: If True, re-execute even if results exist
+        current_user: Current authenticated user
     
     Returns:
         Acceptance message
     """
+    print(f"[EXECUTE_ENDPOINT] Starting execute for {session_id}")
+    
+    # Create dedicated DB session for this endpoint
+    async with AsyncSessionLocal() as db:
+        try:
+            # Authorize access
+            await authorize_session_access(session_id, current_user.id, db)
+            
+            state = await get_state_with_fallback(session_id, db, current_user.id)
+            
+            if not state:
+                raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+            
+            # Validate preconditions
+            if not state.get("council_config"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Council configuration is required before execution. Please complete the Build step first."
+                )
+            
+            # Check if execution already complete and force is not set
+            if state.get("execution_results") and not force:
+                return {"status": "already_executed", "message": "Execution already completed. Use force=true to re-execute."}
+            
+            # Clear previous results if forcing re-execution
+            if force and state.get("execution_results"):
+                session_manager.update_state(session_id, {
+                    "execution_results": None,
+                    "execution_status": {},
+                    "execution_error": None,
+                    "peer_reviews": None,
+                    "aggregated_scores": None,
+                    "chairman_verdict": None
+                })
+            
+            # Set status to executing in file
+            print(f"[EXECUTE_ENDPOINT] Setting status to executing for {session_id}")
+            session_manager.update_state(session_id, {
+                "status": "executing",
+                "current_step": "execute"
+            })
+            
+            # Update DB metadata
+            await SessionService.update_session_metadata(db, session_id, {
+                "status": "executing",
+                "current_step": "execute"
+            })
+            await db.commit()
+            print(f"[EXECUTE_ENDPOINT] Status written to file and DB for {session_id}")
+            
+        except HTTPException:
+            await db.rollback()
+            raise
+        except DatabaseBusyError as e:
+            await db.rollback()
+            raise HTTPException(status_code=503, detail=str(e))
+        except Exception as e:
+            await db.rollback()
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    # Start background task AFTER closing the DB session
+    background_tasks.add_task(execute_council_task, session_id)
+    print(f"[EXECUTE_ENDPOINT] Background task started for {session_id}")
+    
+    return {"status": "accepted", "message": "Execution started"}
+
+
+@app.get("/api/sessions/{session_id}/status")
+async def get_status(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get the current execution/review status.
+    Reads from file-based state.json (primary source) with DB fallback.
+    
+    Args:
+        session_id: The session identifier
+        db: Database session
+        current_user: Current authenticated user
+    
+    Returns:
+        Status information
+    """
     try:
-        state = session_manager.get_state(session_id)
+        # Authorize access
+        await authorize_session_access(session_id, current_user.id, db)
+        
+        state = await get_state_with_fallback(session_id, db, current_user.id)
+        
         if not state:
             raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
         
-        if not state.get("council_config"):
-            raise HTTPException(status_code=400, detail="Council not configured")
+        # Get status from state (file has most up-to-date info)
+        status = state.get("status", "idle")
         
-        # Start background task
-        background_tasks.add_task(execute_council_task, session_id)
-        
-        return {"status": "accepted", "message": "Execution started"}
+        return {
+            "status": status,
+            "current_step": state.get("current_step", "unknown"),
+            "execution_status": state.get("execution_status", {}),
+            "review_status": state.get("review_status", {}),
+            "progress": {
+                "execution": state.get("execution_status", {}),
+                "review": state.get("review_status", {})
+            }
+        }
     
     except HTTPException:
         raise
@@ -307,66 +635,30 @@ async def execute_council(session_id: str, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/sessions/{session_id}/status")
-async def get_status(session_id: str):
-    """
-    Get the current execution/review status.
-    
-    Args:
-        session_id: The session identifier
-    
-    Returns:
-        Status information
-    """
-    try:
-        state = session_manager.get_state(session_id)
-        if not state:
-            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
-        
-        progress = task_progress.get(session_id, {})
-        
-        # Determine overall status
-        execution_complete = state.get("execution_results") is not None
-        review_complete = state.get("peer_reviews") is not None
-        verdict_complete = state.get("chairman_verdict") is not None
-        
-        status = "idle"
-        if verdict_complete:
-            status = "verdict_complete"
-        elif review_complete:
-            status = "review_complete"
-        elif execution_complete:
-            status = "execution_complete"
-        elif progress.get("execution"):
-            status = "executing"
-        elif progress.get("review"):
-            status = "reviewing"
-        
-        return {
-            "status": status,
-            "current_step": state.get("current_step", "unknown"),
-            "execution_status": state.get("execution_status", {}),
-            "review_status": state.get("review_status", {}),
-            "progress": progress
-        }
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @app.get("/api/sessions/{session_id}/results")
-async def get_results(session_id: str):
+async def get_results(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
     Get execution results.
+    Reads from file-based state.json (primary source) with DB fallback.
     
     Args:
         session_id: The session identifier
+        db: Database session
+        current_user: Current authenticated user
     
     Returns:
         Execution results
     """
     try:
-        state = session_manager.get_state(session_id)
+        # Authorize access
+        await authorize_session_access(session_id, current_user.id, db)
+        
+        state = await get_state_with_fallback(session_id, db, current_user.id)
+        
         if not state:
             raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
         
@@ -383,21 +675,32 @@ async def get_results(session_id: str):
 
 
 async def peer_review_task(session_id: str):
-    """Background task to run peer review."""
+    """
+    Background task to run peer review.
+    Uses file-based state.json to avoid database lock contention.
+    """
+    print(f"[REVIEW_TASK] Starting peer review for {session_id}")
     try:
+        # Use file-based state
         state = session_manager.get_state(session_id)
+        if not state:
+            print(f"[REVIEW_TASK] Error: Session {session_id} not found")
+            return
+        
         council_config = state["council_config"]
         question = state["question"]
         execution_results = state["execution_results"]["execution_results"]
         
-        logger = get_session_logger(session_id)
+        # Create logger
+        logs_dir = Path("sessions") / session_id / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        logger = SessionLogger(output_dir=str(logs_dir))
         
-        # Initialize progress
-        if session_id not in task_progress:
-            task_progress[session_id] = {}
-        task_progress[session_id]["review"] = {}
-        
-        progress_cb = progress_callback_factory(session_id, "review")
+        # Simple progress callback that writes to file
+        def progress_cb(agent_name: str, status: str):
+            session_manager.update_state(session_id, {
+                "review_status": {agent_name: status}
+            })
         
         peer_reviews = await AgentCouncilService.run_peer_review(
             council_config,
@@ -413,64 +716,150 @@ async def peer_review_task(session_id: str):
             peer_reviews
         )
         
-        # Update session state
+        # Update file-based state
+        tokens = logger.get_cost_breakdown()
         session_manager.update_state(session_id, {
             "peer_reviews": peer_reviews,
             "aggregated_scores": aggregated_scores,
             "current_step": "synthesize",
-            "tokens": logger.get_cost_breakdown()
+            "status": "review_complete",
+            "tokens": tokens
         })
+        
+        print(f"[REVIEW_TASK] Peer review completed for {session_id}")
+        
+        # Sync status to database
+        try:
+            async with AsyncSessionLocal() as db:
+                await SessionService.update_session_metadata(db, session_id, {
+                    "current_step": "synthesize",
+                    "status": "review_complete",
+                    "last_cost_usd": tokens.get("total_cost_usd"),
+                    "last_total_tokens": tokens.get("total_tokens")
+                })
+                await db.commit()
+        except Exception as e:
+            print(f"Warning: Could not sync review status to DB: {e}")
         
     except Exception as e:
         print(f"Error in peer_review_task: {e}")
-        session_manager.update_state(session_id, {
-            "review_error": str(e)
-        })
+        import traceback
+        traceback.print_exc()
+        
+        try:
+            session_manager.update_state(session_id, {
+                "review_error": str(e),
+                "status": "review_error"
+            })
+        except Exception as e2:
+            print(f"Error updating error state: {e2}")
 
 
 @app.post("/api/sessions/{session_id}/peer_review")
-async def peer_review(session_id: str, background_tasks: BackgroundTasks):
+async def peer_review(
+    session_id: str,
+    background_tasks: BackgroundTasks,
+    force: bool = False,
+    current_user: User = Depends(get_current_user)
+):
     """
     Run peer review process (background task).
     
+    NOTE: Using manual DB session management to avoid auto-commit issues.
+    
     Args:
         session_id: The session identifier
+        force: If True, re-run even if reviews exist
+        current_user: Current authenticated user
     
     Returns:
         Acceptance message
     """
-    try:
-        state = session_manager.get_state(session_id)
-        if not state:
-            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
-        
-        if not state.get("execution_results"):
-            raise HTTPException(status_code=400, detail="No execution results available")
-        
-        # Start background task
-        background_tasks.add_task(peer_review_task, session_id)
-        
-        return {"status": "accepted", "message": "Peer review started"}
+    # Create dedicated DB session for this endpoint
+    async with AsyncSessionLocal() as db:
+        try:
+            # Authorize access
+            await authorize_session_access(session_id, current_user.id, db)
+            
+            state = await get_state_with_fallback(session_id, db, current_user.id)
+            
+            if not state:
+                raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+            
+            # Validate preconditions
+            if not state.get("execution_results"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Execution results are required before peer review. Please complete the Execute step first."
+                )
+            
+            # Check if peer review already complete and force is not set
+            if state.get("peer_reviews") and not force:
+                return {"status": "already_reviewed", "message": "Peer review already completed. Use force=true to re-run."}
+            
+            # Clear previous reviews if forcing re-run
+            if force and state.get("peer_reviews"):
+                session_manager.update_state(session_id, {
+                    "peer_reviews": None,
+                    "aggregated_scores": None,
+                    "review_status": {},
+                    "review_error": None,
+                    "chairman_verdict": None
+                })
+            
+            # Set status to reviewing in file
+            session_manager.update_state(session_id, {
+                "status": "reviewing",
+                "current_step": "review"
+            })
+            
+            # Update DB metadata
+            await SessionService.update_session_metadata(db, session_id, {
+                "status": "reviewing",
+                "current_step": "review"
+            })
+            await db.commit()
+            
+        except HTTPException:
+            await db.rollback()
+            raise
+        except DatabaseBusyError as e:
+            await db.rollback()
+            raise HTTPException(status_code=503, detail=str(e))
+        except Exception as e:
+            await db.rollback()
+            raise HTTPException(status_code=500, detail=str(e))
     
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    # Start background task AFTER closing the DB session
+    background_tasks.add_task(peer_review_task, session_id)
+    
+    return {"status": "accepted", "message": "Peer review started"}
 
 
 @app.get("/api/sessions/{session_id}/reviews")
-async def get_reviews(session_id: str):
+async def get_reviews(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
     Get peer review results and aggregated scores.
+    Reads from file-based state.json (primary source) with DB fallback.
     
     Args:
         session_id: The session identifier
+        db: Database session
+        current_user: Current authenticated user
     
     Returns:
         Peer reviews and aggregated scores
     """
     try:
-        state = session_manager.get_state(session_id)
+        # Authorize access
+        await authorize_session_access(session_id, current_user.id, db)
+        
+        state = await get_state_with_fallback(session_id, db, current_user.id)
+        
         if not state:
             raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
         
@@ -490,29 +879,58 @@ async def get_reviews(session_id: str):
 
 
 @app.post("/api/sessions/{session_id}/synthesize")
-async def synthesize(session_id: str):
+async def synthesize(
+    session_id: str,
+    force: bool = False,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
     Generate the Chairman's final verdict.
     
     Args:
         session_id: The session identifier
+        force: If True, regenerate even if verdict exists
+        db: Database session
+        current_user: Current authenticated user
     
     Returns:
         Final verdict
     """
     try:
-        state = session_manager.get_state(session_id)
+        # Authorize access
+        await authorize_session_access(session_id, current_user.id, db)
+        
+        state = await get_state_with_fallback(session_id, db, current_user.id)
+        
         if not state:
             raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
         
-        if not state.get("execution_results") or not state.get("peer_reviews"):
-            raise HTTPException(status_code=400, detail="Execution and peer review must be completed first")
+        # Validate preconditions
+        if not state.get("execution_results"):
+            raise HTTPException(
+                status_code=400,
+                detail="Execution results are required. Please complete the Execute step first."
+            )
+        
+        if not state.get("peer_reviews"):
+            raise HTTPException(
+                status_code=400,
+                detail="Peer reviews are required. Please complete the Review step first."
+            )
+        
+        # Check if verdict already exists and force is not set
+        if state.get("chairman_verdict") and not force:
+            return {"verdict": state["chairman_verdict"]}
         
         question = state["question"]
         execution_results = state["execution_results"]["execution_results"]
         peer_reviews = state["peer_reviews"]
         
-        logger = get_session_logger(session_id)
+        # Create logger
+        logs_dir = Path("sessions") / session_id / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        logger = SessionLogger(output_dir=str(logs_dir))
         
         final_verdict = await AgentCouncilService.synthesize_verdict(
             question,
@@ -524,34 +942,60 @@ async def synthesize(session_id: str):
         # Finalize logger
         logger.finalize()
         
-        # Update session state
+        # Update file-based state
+        tokens = logger.get_cost_breakdown()
         session_manager.update_state(session_id, {
             "chairman_verdict": final_verdict,
             "current_step": "complete",
-            "tokens": logger.get_cost_breakdown()
+            "status": "verdict_complete",
+            "tokens": tokens
+        })
+        
+        # Update DB metadata
+        await SessionService.update_session_metadata(db, session_id, {
+            "current_step": "complete",
+            "status": "verdict_complete",
+            "last_cost_usd": tokens.get("total_cost_usd"),
+            "last_total_tokens": tokens.get("total_tokens")
         })
         
         return {"verdict": final_verdict}
     
     except HTTPException:
         raise
+    except DatabaseBusyError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=str(e)
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/sessions/{session_id}/summary")
-async def get_summary(session_id: str):
+async def get_summary(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
     Get complete session summary.
+    Reads from file-based state.json (primary source) with DB fallback.
     
     Args:
         session_id: The session identifier
+        db: Database session
+        current_user: Current authenticated user
     
     Returns:
         Complete session data
     """
     try:
-        state = session_manager.get_state(session_id)
+        # Authorize access
+        await authorize_session_access(session_id, current_user.id, db)
+        
+        state = await get_state_with_fallback(session_id, db, current_user.id)
+        
         if not state:
             raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
         
@@ -569,22 +1013,108 @@ async def get_summary(session_id: str):
             "updated_at": state.get("updated_at")
         }
     
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/sessions")
-async def list_sessions():
+async def list_sessions(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
-    List all sessions.
+    List all sessions for the current user.
+    
+    Args:
+        db: Database session
+        current_user: Current authenticated user
     
     Returns:
         List of sessions with metadata
     """
     try:
-        sessions = session_manager.list_sessions()
+        # Get sessions from database filtered by user
+        db_sessions = await SessionService.list_user_sessions(
+            db,
+            user_id=current_user.id,
+            include_deleted=False
+        )
+        
+        # Convert to API response format
+        sessions = [
+            {
+                "session_id": sess.id,
+                "question": sess.question,
+                "current_step": sess.current_step,
+                "status": sess.status,
+                "created_at": sess.created_at.isoformat(),
+                "updated_at": sess.updated_at.isoformat(),
+                "last_cost_usd": sess.last_cost_usd,
+                "last_total_tokens": sess.last_total_tokens
+            }
+            for sess in db_sessions
+        ]
+        
         return {"sessions": sessions}
     
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/sessions/{session_id}")
+async def delete_session(
+    session_id: str,
+    hard: bool = False,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Delete a session (soft delete by default).
+    
+    Args:
+        session_id: The session identifier
+        hard: If True, permanently delete files and DB state; if False, soft delete
+        db: Database session
+        current_user: Current authenticated user
+    
+    Returns:
+        Success message
+    """
+    try:
+        # Soft delete in database
+        deleted = await SessionService.soft_delete_session(
+            db,
+            session_id,
+            current_user.id
+        )
+        
+        if not deleted:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Session {session_id} not found or you don't have access"
+            )
+        
+        # If hard delete requested, remove filesystem data and clear DB state
+        if hard:
+            session_manager.delete_session(session_id)
+            # Optionally clear state JSON in DB too
+            await SessionStateService.update_state(db, session_id, {
+                "deleted": True
+            }, user_id=current_user.id)
+            message = "Session permanently deleted"
+        else:
+            # Mark as deleted in DB state as well
+            await SessionStateService.update_state(db, session_id, {
+                "deleted": True
+            }, user_id=current_user.id)
+            message = "Session soft-deleted (hidden from list, files preserved)"
+        
+        return {"status": "success", "message": message}
+    
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

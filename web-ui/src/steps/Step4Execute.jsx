@@ -1,10 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Loader2, CheckCircle2, XCircle, Eye, Copy, Search } from 'lucide-react';
+import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
+import { Loader2, CheckCircle2, XCircle, Eye, Copy, Search, RefreshCw } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import ReactMarkdown from 'react-markdown';
+import { agentCouncilAPI } from '../api';
 
-export const Step4Execute = ({ sessionId, onNext, onBack }) => {
+export const Step4Execute = () => {
+  const { sessionId } = useParams();
+  const navigate = useNavigate();
+  const { sessionData, startPolling, stopPolling, refreshSession } = useOutletContext();
+  
   const [status, setStatus] = useState('idle');
   const [results, setResults] = useState(null);
   const [agentStatuses, setAgentStatuses] = useState({});
@@ -13,24 +19,44 @@ export const Step4Execute = ({ sessionId, onNext, onBack }) => {
   const pollingInterval = useRef(null);
   
   useEffect(() => {
+    // Check if execution results already exist
+    if (sessionData?.execution_results) {
+      setResults(sessionData.execution_results);
+      setStatus('completed');
+      stopPolling(); // Stop polling if we already have results
+    }
+  }, [sessionData]);
+  
+  useEffect(() => {
     return () => {
       if (pollingInterval.current) {
         clearInterval(pollingInterval.current);
       }
+      stopPolling();
     };
   }, []);
   
-  const startExecution = async () => {
+  const startExecution = async (force = false) => {
     try {
       setStatus('starting');
       setError(null);
       
-      const { agentCouncilAPI } = await import('../api');
-      await agentCouncilAPI.executeCouncil(sessionId);
+      const response = await agentCouncilAPI.executeCouncil(sessionId);
+      
+      // Check if execution was already done
+      if (response.status === 'already_executed' && !force) {
+        setError('Execution already completed. Reload the page or click "Re-run Execution" to run again.');
+        setStatus('error');
+        await refreshSession();
+        return;
+      }
       
       setStatus('executing');
       
-      // Start polling for status
+      // Start controlled polling via SessionLayout
+      startPolling();
+      
+      // Start polling for status updates
       pollingInterval.current = setInterval(async () => {
         try {
           const statusData = await agentCouncilAPI.getStatus(sessionId);
@@ -38,18 +64,38 @@ export const Step4Execute = ({ sessionId, onNext, onBack }) => {
           
           if (statusData.status === 'execution_complete') {
             clearInterval(pollingInterval.current);
+            pollingInterval.current = null;
+            stopPolling();
+            
             const resultsData = await agentCouncilAPI.getResults(sessionId);
             setResults(resultsData);
             setStatus('completed');
+            
+            // Refresh session data to update sidebar
+            await refreshSession();
+          } else if (statusData.status === 'execution_error') {
+            clearInterval(pollingInterval.current);
+            pollingInterval.current = null;
+            stopPolling();
+            setError('Execution encountered an error. Please check the logs and try again.');
+            setStatus('error');
           }
         } catch (err) {
           console.error('Polling error:', err);
+          // Don't stop polling on transient errors
         }
       }, 1500);
       
     } catch (err) {
-      setError(err.message || 'Failed to start execution');
+      console.error('Start execution error:', err);
+      const errorMessage = err.response?.data?.detail || err.message || 'Failed to start execution';
+      setError(errorMessage);
       setStatus('error');
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current);
+        pollingInterval.current = null;
+      }
+      stopPolling();
     }
   };
   
@@ -82,10 +128,10 @@ export const Step4Execute = ({ sessionId, onNext, onBack }) => {
               All agents will run in parallel on your question and context. You can watch their progress in real-time.
             </p>
             <div className="flex justify-center space-x-4">
-              <Button variant="secondary" onClick={onBack}>
+              <Button variant="secondary" onClick={() => navigate(`/sessions/${sessionId}/edit`)}>
                 Back to Edit
               </Button>
-              <Button onClick={startExecution}>
+              <Button onClick={() => startExecution()}>
                 Start Execution
               </Button>
             </div>
@@ -106,10 +152,10 @@ export const Step4Execute = ({ sessionId, onNext, onBack }) => {
             </h3>
             <p className="text-gray-600 mb-8">{error}</p>
             <div className="flex justify-center space-x-4">
-              <Button variant="secondary" onClick={onBack}>
+              <Button variant="secondary" onClick={() => navigate(`/sessions/${sessionId}/edit`)}>
                 Go Back
               </Button>
-              <Button onClick={startExecution}>
+              <Button onClick={() => startExecution()}>
                 Try Again
               </Button>
             </div>
@@ -173,11 +219,24 @@ export const Step4Execute = ({ sessionId, onNext, onBack }) => {
               All agents have completed their analysis. Review their responses below.
             </p>
           </div>
-          <div className="text-right">
+          <div className="text-right flex items-center space-x-4">
             <div className="text-sm text-gray-500">
               {results?.execution_results?.filter(r => r.status === 'success').length || 0} succeeded,{' '}
               {results?.execution_results?.filter(r => r.status === 'error').length || 0} failed
             </div>
+            <Button 
+              variant="secondary" 
+              className="text-sm"
+              onClick={() => {
+                if (window.confirm('This will re-run the entire council execution. Continue?')) {
+                  setStatus('idle');
+                  setResults(null);
+                }
+              }}
+            >
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Re-run Execution
+            </Button>
           </div>
         </div>
         
@@ -262,10 +321,10 @@ export const Step4Execute = ({ sessionId, onNext, onBack }) => {
       {/* Actions */}
       <div className="bg-white rounded-lg shadow-md border-2 border-primary-200 p-6">
         <div className="flex justify-between items-center">
-          <Button variant="secondary" onClick={onBack}>
-            ← Back
+          <Button variant="secondary" onClick={() => navigate(`/sessions/${sessionId}/edit`)}>
+            ← Back to Edit
           </Button>
-          <Button onClick={onNext}>
+          <Button onClick={() => navigate(`/sessions/${sessionId}/review`)}>
             Run Peer Review →
           </Button>
         </div>

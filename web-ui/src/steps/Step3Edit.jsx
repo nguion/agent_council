@@ -1,12 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
 import { Plus, Edit2, Trash2, Copy, Search, AlertCircle } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
+import { agentCouncilAPI } from '../api';
 
-export const Step3Edit = ({ initialConfig, onNext, onBack }) => {
-  const [councilConfig, setCouncilConfig] = useState(initialConfig);
+export const Step3Edit = () => {
+  const { sessionId } = useParams();
+  const navigate = useNavigate();
+  const { sessionData, refreshSession } = useOutletContext();
+  
+  const [councilConfig, setCouncilConfig] = useState(null);
   const [editingAgent, setEditingAgent] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  
+  useEffect(() => {
+    // Initialize from session data
+    if (sessionData?.council_config) {
+      setCouncilConfig(sessionData.council_config);
+    }
+  }, [sessionData]);
   
   const updateAgent = (index, updates) => {
     const newAgents = [...councilConfig.agents];
@@ -38,14 +53,38 @@ export const Step3Edit = ({ initialConfig, onNext, onBack }) => {
     setShowAddModal(false);
   };
   
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (councilConfig.agents.length === 0) {
       if (!window.confirm('The council is empty. Are you sure you want to continue?')) {
         return;
       }
     }
-    onNext(councilConfig);
+    
+    try {
+      setLoading(true);
+      setError(null);
+      await agentCouncilAPI.updateCouncil(sessionId, councilConfig);
+      await refreshSession();
+      navigate(`/sessions/${sessionId}/execute`);
+    } catch (err) {
+      console.error('Update council error:', err);
+      setError(err.response?.data?.detail || err.message || 'Failed to update council');
+      setLoading(false);
+    }
   };
+  
+  if (!councilConfig) {
+    return (
+      <div className="max-w-4xl mx-auto py-12 px-4">
+        <Card>
+          <div className="text-center py-12">
+            <div className="animate-spin h-8 w-8 border-4 border-primary-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading council configuration...</p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
   
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
@@ -184,14 +223,37 @@ export const Step3Edit = ({ initialConfig, onNext, onBack }) => {
         </button>
       </div>
       
+      {/* Error Display */}
+      {error && (
+        <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Actions */}
       <div className="bg-white rounded-lg shadow-md border-2 border-primary-200 p-6">
         <div className="flex justify-between items-center">
-          <Button variant="secondary" onClick={onBack}>
+          <Button 
+            variant="secondary" 
+            onClick={() => navigate(`/sessions/${sessionId}/build`)}
+            disabled={loading}
+          >
             ← Back
           </Button>
-          <Button onClick={handleContinue} disabled={councilConfig.agents.length === 0}>
-            Save & Execute Council →
+          <Button 
+            onClick={handleContinue} 
+            disabled={councilConfig.agents.length === 0 || loading}
+          >
+            {loading ? 'Saving...' : 'Save & Execute Council →'}
           </Button>
         </div>
       </div>

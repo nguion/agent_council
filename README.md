@@ -14,7 +14,15 @@ A modular, agentic framework for creating, customizing, and executing councils o
 *   **GPT-5.1 Integration**: Native support for reasoning effort configuration (`none`, `low`, `medium`, `high`).
 *   **Cost & Token Tracking**: Real-time token usage monitoring and automatic cost calculation.
 *   **CLI Interface**: Rich terminal UI for easy interaction.
-*   **Web Interface**: Modern React-based web app with real-time progress tracking.
+*   **Web Interface**: Modern React-based web app with:
+    - **Production-grade state management** with URL-based routing
+    - **Multi-user support** - per-user session isolation with database-backed storage
+    - **Session sidebar** - left panel shows all your sessions for quick navigation
+    - **Session persistence** - resume sessions across browser restarts
+    - **Shareable URLs** - send session links to colleagues (they must be the owner)
+    - **Intelligent caching** - prevents accidental reruns of expensive operations
+    - **Real-time progress tracking** during execution and review
+    - **Session history** - browse, resume, and delete your past councils
 
 ---
 
@@ -96,6 +104,10 @@ python3 test_setup.py
 
 ### Web Interface
 
+The web interface provides a guided 5-step workflow with session persistence and URL-based navigation.
+
+#### Quick Workflow
+
 1. **Start both servers** (see Quick Start above)
 2. **Open** http://localhost:5173
 3. **Enter your question** (example pre-filled)
@@ -108,6 +120,69 @@ python3 test_setup.py
 10. **Download** - Get complete session as JSON
 
 **Expected time:** 3-5 minutes | **Cost:** $0.05-$0.15
+
+#### Session Management
+
+The application features a **three-panel layout** for efficient session management:
+
+```
+┌─────────────────┬──────────────────────────┬─────────────────┐
+│ Your Sessions   │   Main Workflow          │ Session Details │
+│ (Left Panel)    │   (Steps 1-5)            │ (Right Panel)   │
+├─────────────────┼──────────────────────────┼─────────────────┤
+│ My Sessions [+] │                          │ Question: ...   │
+│ 3 sessions      │  [Current step view]     │ Council: ...    │
+│                 │                          │ Cost: $0.234    │
+│ ✓ Complete 2h   │                          │ Tokens: 20.8K   │
+│ Strategy for... │                          │                 │
+│ [trash]         │                          │                 │
+└─────────────────┴──────────────────────────┴─────────────────┘
+```
+
+**Left Sidebar (Your Sessions):**
+- All your sessions in one place
+- Quick navigation - click any session to resume
+- Delete sessions - hover and click trash icon
+- See status at a glance (color-coded badges)
+- Track costs per session
+- Auto-refreshes every 10 seconds
+
+**Features:**
+- **View all sessions**: Check the left sidebar or navigate to /sessions
+- **Resume sessions**: Click any session in the sidebar to continue where you left off
+- **Delete sessions**: Hover over a session and click the trash icon (soft delete - files preserved)
+- **Create sessions**: Click the [+] button in sidebar header
+- **Navigate safely**: Use browser back/forward buttons - sessions auto-save
+- **Refresh anytime**: All progress is persisted on the backend
+- **Privacy**: You see only your own sessions - cannot access others' data
+
+#### Example Questions
+
+✅ **Good**: "What are 5 data-driven strategies to reduce customer churn for B2B SaaS companies with 50-200 employees?"
+
+❌ **Too vague**: "How to get more customers?"
+
+#### Best Practices
+
+**Council Size:**
+- **Small (2-3 agents)**: Quick, focused problems
+- **Medium (4-6 agents)**: Complex problems, multiple perspectives  
+- **Large (7+ agents)**: Very complex, strategic decisions
+
+**Reasoning Effort:**
+- **Low**: Simple analysis (~10s per agent)
+- **Medium**: Balanced analysis (~30s per agent)
+- **High**: Deep strategic thinking (~60s+ per agent)
+
+**Web Search:**
+- Enable for: current events, statistics, research
+- Disable for: internal company data, hypothetical scenarios
+
+**File Uploads:**
+- Use PDFs for reports, whitepapers
+- Use CSVs for data, tables
+- Use TXT/MD for notes, documentation
+- Keep files under 10MB each
 
 ### CLI Interface
 
@@ -231,10 +306,19 @@ pip install -r requirements-web.txt
 echo "OPENAI_API_KEY=sk-..." > .env
 ```
 
+**Missing greenlet (database dependency):**
+```bash
+pip install greenlet
+```
+
 **Port 8000 in use:**
 ```bash
 lsof -ti:8000 | xargs kill -9
 ```
+
+**Database initialization:**
+- SQLite database (`agent_council.db`) auto-creates on first startup
+- If issues, delete `agent_council.db` and restart backend
 
 ### Frontend Won't Start
 
@@ -347,6 +431,7 @@ See interactive docs: http://localhost:8000/docs
 - 8GB RAM minimum
 - OpenAI API key with credits
 - Modern browser (for web interface)
+- SQLite (included) or PostgreSQL (for production multi-user deployment)
 
 ---
 
@@ -357,8 +442,10 @@ See interactive docs: http://localhost:8000/docs
 3. Review API docs at http://localhost:8000/docs
 4. Ensure API key is valid and has credits
 
+## Documentation
+
+For maintainer notes, architecture details, and technical implementation, see **[AGENTS.md](AGENTS.md)**
+
 ---
 
 **Version:** 1.0.0 | **Last Updated:** December 10, 2025
-
-**For maintainer notes and technical details, see:** `AGENTS.md`

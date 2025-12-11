@@ -27,6 +27,9 @@ def check_python_package(package_name):
         return False
 
 def main():
+    # Change working directory to project root
+    os.chdir(Path(__file__).resolve().parent.parent)
+
     print("🔍 Agent Council Web App - Setup Verification\n")
     print("=" * 60)
     

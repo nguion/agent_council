@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
-import { Upload, X, FileText } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Upload, X, FileText, List } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
+import { agentCouncilAPI } from '../api';
 
-export const Step1Input = ({ onNext }) => {
-  const [question, setQuestion] = useState(
-    'What are some realistic but novel ideas for Delta Airlines to differentiate in 2026 and increase profits?'
-  );
+export const Step1Input = () => {
+  const navigate = useNavigate();
+  const [question, setQuestion] = useState('');
   const [files, setFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   
   const handleDrop = (e) => {
     e.preventDefault();
@@ -47,20 +50,43 @@ export const Step1Input = ({ onNext }) => {
     return <FileText className="h-5 w-5 text-gray-400" />;
   };
   
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!question.trim()) {
-      alert('Please enter a question');
+      setError('Please enter a question');
       return;
     }
-    onNext({ question, files });
+    
+    try {
+      setLoading(true);
+      setError(null);
+      const result = await agentCouncilAPI.createSession(question.trim(), files);
+      
+      // Navigate to the newly created session's build page
+      navigate(`/sessions/${result.session_id}/build`);
+    } catch (err) {
+      console.error('Failed to create session:', err);
+      setError(err.response?.data?.detail || err.message || 'Failed to create session');
+      setLoading(false);
+    }
   };
   
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
       <div className="text-center mb-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex-1"></div>
+          <h2 className="text-3xl font-bold text-gray-900 flex-1">
           What problem do you want the council to solve?
         </h2>
+          <div className="flex-1 flex justify-end">
+            <Link to="/sessions">
+              <Button variant="secondary" className="text-sm">
+                <List className="h-4 w-4 mr-2" />
+                View Sessions
+              </Button>
+            </Link>
+          </div>
+        </div>
         <p className="text-gray-600">
           Provide your core question and optionally add context files to help the agents understand the problem better.
         </p>
@@ -78,6 +104,9 @@ export const Step1Input = ({ onNext }) => {
           className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
           placeholder="Enter your question..."
         />
+        {error && (
+          <p className="mt-2 text-sm text-red-600">{error}</p>
+        )}
       </Card>
       
       {/* File Upload */}
@@ -150,10 +179,19 @@ export const Step1Input = ({ onNext }) => {
       
       {/* Action Button */}
       <div className="flex justify-center">
-        <Button onClick={handleSubmit} disabled={!question.trim()}>
-          Build Council
+        <Button onClick={handleSubmit} disabled={!question.trim() || loading}>
+          {loading ? 'Creating Session...' : 'Build Council'}
         </Button>
       </div>
+      
+      {/* Loading Overlay */}
+      {loading && (
+        <div className="fixed inset-0 bg-black bg-opacity-25 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 shadow-xl">
+            <div className="animate-spin h-8 w-8 border-4 border-primary-600 border-t-transparent rounded-full mx-auto"></div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
