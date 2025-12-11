@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
+import { useParams, useOutletContext } from 'react-router-dom';
 import { Loader2, Award, Download, Copy, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
@@ -8,7 +8,6 @@ import { agentCouncilAPI } from '../api';
 
 export const Step5Review = () => {
   const { sessionId } = useParams();
-  const navigate = useNavigate();
   const { sessionData, startPolling, stopPolling, refreshSession } = useOutletContext();
   
   const [reviewStatus, setReviewStatus] = useState('idle');
@@ -165,10 +164,7 @@ export const Step5Review = () => {
             <p className="text-gray-600 mb-8">
               Each agent will now review the proposals from their peers and provide structured critiques.
             </p>
-            <div className="flex justify-center space-x-4">
-              <Button variant="secondary" onClick={() => navigate(`/sessions/${sessionId}/execute`)}>
-                Back to Results
-              </Button>
+            <div className="flex justify-center">
               <Button onClick={startPeerReview}>
                 Start Peer Review
               </Button>
@@ -314,7 +310,7 @@ export const Step5Review = () => {
               <h4 className="font-medium text-gray-900 mb-4">
                 Detailed Critiques for Proposal #{expandedProposal}
               </h4>
-              <div className="space-y-4">
+              <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
                 {reviews.map((review, idx) => {
                   const proposalReview = review.parsed?.per_proposal?.find(
                     p => p.proposal_id === parseInt(expandedProposal)
@@ -387,7 +383,7 @@ export const Step5Review = () => {
       
       {verdictStatus === 'completed' && verdict && (
         <Card title="Chairman's Final Verdict" className="mb-8">
-          <div className="prose prose-base max-w-none text-gray-900">
+          <div className="prose prose-base max-w-none text-gray-900 max-h-[70vh] overflow-y-auto pr-2">
             <ReactMarkdown
               components={{
                 h1: ({node, ...props}) => <h1 className="text-2xl font-bold mb-4 mt-6 text-gray-900 border-b border-primary-200 pb-2" {...props} />,
@@ -430,22 +426,14 @@ export const Step5Review = () => {
         </Card>
       )}
       
-      {/* Bottom Actions */}
+      {/* Completion Badge */}
       <div className="bg-white rounded-lg shadow-md border-2 border-primary-200 p-6">
-        <div className="flex justify-between items-center">
-          <Button variant="secondary" onClick={() => navigate(`/sessions/${sessionId}/execute`)}>
-            ← Back to Execution
-          </Button>
-          <div className="flex items-center space-x-4">
-          {verdictStatus === 'completed' && (
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+        <div className="flex items-center justify-end gap-3">
+            {verdictStatus === 'completed' && (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800 whitespace-nowrap">
                 ✓ Session Complete
               </span>
             )}
-            <Button variant="secondary" onClick={() => navigate('/sessions')}>
-              View All Sessions
-            </Button>
-            </div>
         </div>
       </div>
     </div>

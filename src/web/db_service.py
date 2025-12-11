@@ -6,6 +6,7 @@ import uuid
 from typing import Optional, List
 from datetime import datetime
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database import User, Session
@@ -49,9 +50,20 @@ class UserService:
             updated_at=datetime.utcnow()
         )
         db.add(user)
-        await db.flush()
-        
-        return user
+        try:
+            await db.flush()
+            return user
+        except IntegrityError:
+            # Another request may have created the user concurrently; return existing
+            await db.rollback()
+            result = await db.execute(
+                select(User).where(User.external_id == external_id)
+            )
+            existing = result.scalar_one_or_none()
+            if existing:
+                return existing
+            # If still missing, re-raise so caller surfaces the error
+            raise
 
 
 class SessionService:

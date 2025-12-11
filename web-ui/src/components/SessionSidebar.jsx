@@ -15,7 +15,7 @@ export const SessionSidebar = ({ session, tokens }) => {
   };
   
   return (
-    <div className="w-80 bg-gray-50 border-l border-gray-200 p-6 overflow-y-auto">
+    <div className="w-full min-w-0 bg-gray-50 border-l border-gray-200 p-6 overflow-y-auto">
       <div className="space-y-6">
         {/* Session Info */}
         <div>

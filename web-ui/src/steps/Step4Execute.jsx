@@ -127,10 +127,7 @@ export const Step4Execute = () => {
             <p className="text-gray-600 mb-8">
               All agents will run in parallel on your question and context. You can watch their progress in real-time.
             </p>
-            <div className="flex justify-center space-x-4">
-              <Button variant="secondary" onClick={() => navigate(`/sessions/${sessionId}/edit`)}>
-                Back to Edit
-              </Button>
+            <div className="flex justify-center">
               <Button onClick={() => startExecution()}>
                 Start Execution
               </Button>
@@ -151,10 +148,7 @@ export const Step4Execute = () => {
               Execution Failed
             </h3>
             <p className="text-gray-600 mb-8">{error}</p>
-            <div className="flex justify-center space-x-4">
-              <Button variant="secondary" onClick={() => navigate(`/sessions/${sessionId}/edit`)}>
-                Go Back
-              </Button>
+            <div className="flex justify-center">
               <Button onClick={() => startExecution()}>
                 Try Again
               </Button>
@@ -289,7 +283,7 @@ export const Step4Execute = () => {
               {/* TLDR */}
               <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                 <p className="text-sm font-medium text-gray-700 mb-2">TL;DR</p>
-                <div className="text-sm text-gray-900 prose prose-sm max-w-none">
+                <div className="text-sm text-gray-900 prose prose-sm max-w-none max-h-64 overflow-y-auto pr-1">
                   <ReactMarkdown>{result.tldr}</ReactMarkdown>
                 </div>
               </div>
@@ -320,10 +314,7 @@ export const Step4Execute = () => {
       
       {/* Actions */}
       <div className="bg-white rounded-lg shadow-md border-2 border-primary-200 p-6">
-        <div className="flex justify-between items-center">
-          <Button variant="secondary" onClick={() => navigate(`/sessions/${sessionId}/edit`)}>
-            ← Back to Edit
-          </Button>
+        <div className="flex justify-end">
           <Button onClick={() => navigate(`/sessions/${sessionId}/review`)}>
             Run Peer Review →
           </Button>
@@ -350,7 +341,7 @@ export const Step4Execute = () => {
             </div>
             
             <div className="p-6">
-              <div className="prose prose-lg max-w-none text-gray-900">
+              <div className="prose prose-lg max-w-none text-gray-900 max-h-[65vh] overflow-y-auto pr-2">
                 <ReactMarkdown>{selectedAgent.response}</ReactMarkdown>
               </div>
             </div>

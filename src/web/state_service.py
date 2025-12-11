@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import OperationalError
 from pathlib import Path
 
-from .database import Session as DBSession
+from .database import Session as DBSession, SessionState, AsyncSessionLocal, IS_SQLITE
 
 
 class DatabaseBusyError(Exception):
@@ -22,6 +22,11 @@ class DatabaseBusyError(Exception):
 
 class SessionStateService:
     """Service for managing session state in the database."""
+
+    # In-memory batching for progress updates (per session)
+    _pending_updates: Dict[str, Dict[str, Any]] = {}
+    _pending_tasks: Dict[str, asyncio.Task] = {}
+    _pending_lock = asyncio.Lock()
     
     @staticmethod
     async def _retry_on_lock(func, max_attempts=20, base_delay=0.5):
@@ -78,30 +83,37 @@ class SessionStateService:
         Returns:
             Session state dict, or None if not found
         """
-        query = select(DBSession).where(DBSession.id == session_id)
-        
+        # Prefer dedicated SessionState table
+        state_row = await db.get(SessionState, session_id)
+        if state_row:
+            return state_row.state
+
+        # Fallback to Session.state column (legacy)
+        query = select(DBSession.state).where(DBSession.id == session_id)
         if user_id:
             query = query.where(DBSession.user_id == user_id)
-        
         result = await db.execute(query)
-        db_session = result.scalar_one_or_none()
-        
-        if not db_session:
-            return None
-        
-        # If state is NULL, check for legacy state.json (migration path)
-        if db_session.state is None:
-            legacy_state = await SessionStateService._try_load_legacy_state(session_id)
-            if legacy_state:
-                # Lazily migrate to DB
-                db_session.state = legacy_state
+        legacy_state = result.scalar_one_or_none()
+        if legacy_state:
+            # Lazily backfill SessionState
+            try:
+                await SessionStateService._persist_state(db, session_id, legacy_state)
                 await db.flush()
-                return legacy_state
-            
-            # No state yet
-            return None
-        
-        return db_session.state
+            except Exception as e:
+                print(f"Warning: could not backfill SessionState for {session_id}: {e}")
+            return legacy_state
+
+        # Fallback to file-based legacy state (migration path)
+        legacy_state = await SessionStateService._try_load_legacy_state(session_id)
+        if legacy_state:
+            try:
+                await SessionStateService._persist_state(db, session_id, legacy_state)
+                await db.flush()
+            except Exception as e:
+                print(f"Warning: could not import legacy file state for {session_id}: {e}")
+            return legacy_state
+
+        return None
     
     @staticmethod
     async def _try_load_legacy_state(session_id: str) -> Optional[Dict[str, Any]]:
@@ -173,14 +185,9 @@ class SessionStateService:
             "review_error": None
         }
         
-        # Update the session row with initial state
-        await db.execute(
-            update(DBSession)
-            .where(DBSession.id == session_id)
-            .values(state=initial_state, updated_at=datetime.utcnow())
-        )
+        await SessionStateService._persist_state(db, session_id, initial_state)
+        await SessionStateService._sync_session_metadata(db, session_id, initial_state)
         await db.flush()
-        
         return initial_state
     
     @staticmethod
@@ -208,42 +215,17 @@ class SessionStateService:
             DatabaseBusyError: If database is locked after retries
         """
         async def _do_update():
-            # Load current state
             current_state = await SessionStateService.get_state(db, session_id, user_id)
             if current_state is None:
                 raise ValueError(f"Session {session_id} not found")
-            
-            # Deep merge updates into current state
+
             merged_state = SessionStateService._deep_merge(current_state, updates)
             merged_state["updated_at"] = datetime.utcnow().isoformat()
-            
-            # Prepare column updates
-            column_updates = {
-                "state": merged_state,
-                "updated_at": datetime.utcnow()
-            }
-            
-            # Sync key fields to Session table columns for efficient queries
-            if "current_step" in updates:
-                column_updates["current_step"] = updates["current_step"]
-            
-            if "status" in updates:
-                column_updates["status"] = updates["status"]
-            
-            if "tokens" in updates and isinstance(updates["tokens"], dict):
-                if "total_cost_usd" in updates["tokens"]:
-                    column_updates["last_cost_usd"] = updates["tokens"]["total_cost_usd"]
-                if "total_tokens" in updates["tokens"]:
-                    column_updates["last_total_tokens"] = updates["tokens"]["total_tokens"]
-            
-            # Update database
-            query = update(DBSession).where(DBSession.id == session_id)
-            if user_id:
-                query = query.where(DBSession.user_id == user_id)
-            
-            await db.execute(query.values(**column_updates))
+
+            await SessionStateService._persist_state(db, session_id, merged_state)
+            await SessionStateService._sync_session_metadata(db, session_id, merged_state, user_id)
             await db.flush()
-            
+
             return merged_state
         
         return await SessionStateService._retry_on_lock(_do_update)
@@ -276,6 +258,52 @@ class SessionStateService:
             updates["current_step"] = current_step
         
         await SessionStateService.update_state(db, session_id, updates, user_id)
+
+    # -------- Batching for progress updates --------
+
+    @classmethod
+    async def update_state_batched(
+        cls,
+        session_id: str,
+        updates: Dict[str, Any],
+        user_id: Optional[str] = None,
+        delay: float = 0.35
+    ):
+        """
+        Coalesce rapid progress updates to reduce write pressure.
+        """
+        async with cls._pending_lock:
+            base = cls._pending_updates.get(session_id, {})
+            cls._pending_updates[session_id] = cls._deep_merge(base, updates)
+            if session_id not in cls._pending_tasks:
+                cls._pending_tasks[session_id] = asyncio.create_task(
+                    cls._flush_pending(session_id, user_id, delay)
+                )
+
+    @classmethod
+    async def _flush_pending(cls, session_id: str, user_id: Optional[str], delay: float):
+        await asyncio.sleep(delay)
+        updates = None
+        async with cls._pending_lock:
+            updates = cls._pending_updates.pop(session_id, None)
+            cls._pending_tasks.pop(session_id, None)
+
+        if not updates:
+            return
+
+        try:
+            async with AsyncSessionLocal() as db:
+                await cls.update_state(db, session_id, updates, user_id)
+                await db.commit()
+        except Exception as e:
+            print(f"Warning: batched update failed for {session_id}: {e}")
+            # Fallback: best effort retry once without batching
+            try:
+                async with AsyncSessionLocal() as db:
+                    await cls.update_state(db, session_id, updates, user_id)
+                    await db.commit()
+            except Exception as e2:
+                print(f"Error: retry failed for {session_id}: {e2}")
     
     @staticmethod
     def _deep_merge(base: Dict[str, Any], updates: Dict[str, Any]) -> Dict[str, Any]:
@@ -301,6 +329,62 @@ class SessionStateService:
                 result[key] = copy.deepcopy(value)
         
         return result
+
+    # -------- Internal helpers --------
+
+    @staticmethod
+    async def _persist_state(db: AsyncSession, session_id: str, state: Dict[str, Any]):
+        """Upsert into SessionState (and keep Session.state for compatibility)."""
+        state_row = await db.get(SessionState, session_id)
+        if not state_row:
+            state_row = SessionState(session_id=session_id, state=state, updated_at=datetime.utcnow())
+            db.add(state_row)
+        else:
+            state_row.state = state
+            state_row.updated_at = datetime.utcnow()
+
+        # Keep legacy Session.state in sync for backwards compatibility and optional SQLite fallback
+        session_values = {"updated_at": datetime.utcnow()}
+        # Only attempt to write the legacy state column if it exists (e.g., SQLite fallback)
+        if hasattr(DBSession, "state"):
+            session_values["state"] = state
+
+        await db.execute(
+            update(DBSession)
+            .where(DBSession.id == session_id)
+            .values(**session_values)
+        )
+
+    @staticmethod
+    async def _sync_session_metadata(
+        db: AsyncSession,
+        session_id: str,
+        merged_state: Dict[str, Any],
+        user_id: Optional[str] = None
+    ):
+        """Sync key metadata fields onto the sessions table for fast querying."""
+        column_updates = {
+            "updated_at": datetime.utcnow()
+        }
+
+        if "current_step" in merged_state:
+            column_updates["current_step"] = merged_state["current_step"]
+
+        if "status" in merged_state:
+            column_updates["status"] = merged_state["status"]
+
+        tokens = merged_state.get("tokens", {})
+        if isinstance(tokens, dict):
+            if "total_cost_usd" in tokens:
+                column_updates["last_cost_usd"] = tokens["total_cost_usd"]
+            if "total_tokens" in tokens:
+                column_updates["last_total_tokens"] = tokens["total_tokens"]
+
+        query = update(DBSession).where(DBSession.id == session_id)
+        if user_id:
+            query = query.where(DBSession.user_id == user_id)
+
+        await db.execute(query.values(**column_updates))
     
     @staticmethod
     async def get_session_with_state(

@@ -114,7 +114,7 @@ export const UserSessionsSidebar = () => {
 
   if (loading) {
     return (
-      <div className="w-80 bg-gray-50 border-r border-gray-200 p-4 overflow-y-auto">
+      <div className="w-full min-w-0 bg-gray-50 border-r border-gray-200 p-4 overflow-y-auto">
         <div className="text-center py-12">
           <Loader2 className="h-8 w-8 text-primary-600 animate-spin mx-auto mb-2" />
           <p className="text-sm text-gray-600">Loading sessions...</p>
@@ -125,7 +125,7 @@ export const UserSessionsSidebar = () => {
 
   if (error) {
     return (
-      <div className="w-80 bg-gray-50 border-r border-gray-200 p-4 overflow-y-auto">
+      <div className="w-full min-w-0 bg-gray-50 border-r border-gray-200 p-4 overflow-y-auto">
         <div className="text-center py-8">
           <AlertCircle className="h-8 w-8 text-red-600 mx-auto mb-2" />
           <p className="text-sm text-red-600 mb-4">{error}</p>
@@ -141,7 +141,7 @@ export const UserSessionsSidebar = () => {
   }
 
   return (
-    <div className="w-80 bg-gray-50 border-r border-gray-200 flex flex-col overflow-hidden">
+    <div className="w-full min-w-0 h-full min-h-0 bg-gray-50 border-r border-gray-200 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-gray-200 bg-white">
         <div className="flex items-center justify-between mb-3">
@@ -243,7 +243,7 @@ export const UserSessionsSidebar = () => {
       </div>
 
       {/* Footer */}
-      <div className="p-3 border-t border-gray-200 bg-white">
+      <div className="p-3 border-t border-gray-200 bg-white mt-auto">
         <button
           onClick={() => navigate('/sessions')}
           className="w-full text-sm text-center text-primary-600 hover:text-primary-700 font-medium py-2"

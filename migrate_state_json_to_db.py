@@ -14,10 +14,10 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
-# Add project root to path for imports
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from src.web.database import init_db, AsyncSessionLocal, SessionState
+from src.web.database import init_db, AsyncSessionLocal
 from src.web.db_service import UserService, SessionService
 from src.web.state_service import SessionStateService
 
@@ -80,16 +80,16 @@ async def migrate_sessions():
                 db_session = result.scalar_one_or_none()
                 
                 if db_session:
-                    # Check if already migrated into SessionState
-                    existing_state_row = await db.get(SessionState, session_id)
-                    if existing_state_row:
-                        print(f"⊘ {session_id}: Already migrated (SessionState), skipping")
+                    # Check if already migrated (has state JSON)
+                    if db_session.state is not None:
+                        print(f"⊘ {session_id}: Already migrated, skipping")
                         skipped_count += 1
                         continue
                     
-                    # Update existing session metadata and state columns
+                    # Update existing session with state
                     db_session.state = state
                     
+                    # Sync metadata from state
                     if "question" in state and not db_session.question:
                         db_session.question = state["question"]
                     if "current_step" in state:
@@ -105,6 +105,7 @@ async def migrate_sessions():
                     else:
                         db_session.status = state.get("status", "idle")
                     
+                    # Update cost/token info
                     tokens = state.get("tokens", {})
                     if "total_cost_usd" in tokens:
                         db_session.last_cost_usd = tokens["total_cost_usd"]
@@ -112,9 +113,6 @@ async def migrate_sessions():
                         db_session.last_total_tokens = tokens["total_tokens"]
                     
                     db_session.updated_at = datetime.utcnow()
-
-                    # Create SessionState row
-                    db.add(SessionState(session_id=session_id, state=state, updated_at=datetime.utcnow()))
                     
                     print(f"✓ {session_id}: Migrated (existing DB entry)")
                     migrated_count += 1
@@ -177,7 +175,6 @@ async def migrate_sessions():
                         new_session.last_total_tokens = tokens["total_tokens"]
                     
                     db.add(new_session)
-                    db.add(SessionState(session_id=session_id, state=state, updated_at=datetime.utcnow()))
                     
                     print(f"✓ {session_id}: Migrated (created new DB entry)")
                     migrated_count += 1

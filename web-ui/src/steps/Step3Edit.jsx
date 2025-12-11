@@ -241,14 +241,7 @@ export const Step3Edit = () => {
       
       {/* Actions */}
       <div className="bg-white rounded-lg shadow-md border-2 border-primary-200 p-6">
-        <div className="flex justify-between items-center">
-          <Button 
-            variant="secondary" 
-            onClick={() => navigate(`/sessions/${sessionId}/build`)}
-            disabled={loading}
-          >
-            ← Back
-          </Button>
+        <div className="flex justify-end">
           <Button 
             onClick={handleContinue} 
             disabled={councilConfig.agents.length === 0 || loading}

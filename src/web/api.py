@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .session_manager import SessionManager
 from .services import AgentCouncilService
-from .database import get_db, init_db, AsyncSessionLocal, User, Session as DBSession
+from .database import get_db, init_db, AsyncSessionLocal, User, Session as DBSession, IS_SQLITE
 from .db_service import UserService, SessionService
 from .state_service import SessionStateService, DatabaseBusyError
 from agent_council.utils.session_logger import SessionLogger
@@ -39,6 +39,7 @@ app.add_middleware(
 
 # Initialize session manager
 session_manager = SessionManager()
+USE_DB_STATE = not IS_SQLITE
 
 
 # Database initialization on startup
@@ -138,12 +139,50 @@ async def get_state_with_fallback(
     """
     Prefer file-based state.json, fall back to DB if missing.
     """
+    if USE_DB_STATE and db:
+        state = await SessionStateService.get_state(db, session_id, user_id) if user_id else await SessionStateService.get_state(db, session_id)
+        if state:
+            return state
+    # Legacy/file fallback
     state = session_manager.get_state(session_id)
     if state:
         return state
-    if db:
-        return await SessionStateService.get_state(db, session_id, user_id) if user_id else await SessionStateService.get_state(db, session_id)
+    # If we are on SQLite but DB has state, try it as a last resort
+    if not USE_DB_STATE and db:
+        state = await SessionStateService.get_state(db, session_id, user_id) if user_id else await SessionStateService.get_state(db, session_id)
+        if state:
+            return state
     return None
+
+
+async def read_state_primary(
+    session_id: str,
+    db: AsyncSession,
+    user_id: Optional[str] = None
+):
+    """Read session state from primary store (DB if enabled, else file)."""
+    if USE_DB_STATE:
+        return await SessionStateService.get_state(db, session_id, user_id)
+    return session_manager.get_state(session_id)
+
+
+async def write_state_primary(
+    session_id: str,
+    updates: dict,
+    db: Optional[AsyncSession] = None,
+    user_id: Optional[str] = None,
+    batched: bool = False
+):
+    """Write session state to primary store with optional batching."""
+    if USE_DB_STATE:
+        if batched:
+            await SessionStateService.update_state_batched(session_id, updates, user_id)
+        else:
+            if db is None:
+                raise ValueError("DB session required for direct state update in DB mode")
+            await SessionStateService.update_state(db, session_id, updates, user_id)
+    else:
+        session_manager.update_state(session_id, updates)
 
 
 async def get_session_logger(session_id: str, db: AsyncSession, update_state: bool = True) -> SessionLogger:
@@ -233,6 +272,16 @@ async def create_session(
             question=question
         )
         
+        # Initialize state (DB primary, file fallback)
+        if USE_DB_STATE:
+            await SessionStateService.init_state(
+                db,
+                session_id=session_id,
+                user_id=current_user.id,
+                question=question,
+                created_at=created_at
+            )
+
         # Save uploaded files
         file_paths = []
         for file in files:
@@ -255,17 +304,22 @@ async def create_session(
                 for item in ingested_data
             ]
         
-        # Write to file-based state (primary, used by background tasks)
-        session_manager.update_state(session_id, {
-            "session_id": session_id,
-            "user_id": current_user.id,
-            "question": question,
-            "context_files": file_paths,
-            "ingested_data": ingested_data,
-            "current_step": "build",
-            "status": "idle",
-            "created_at": created_at.isoformat()
-        })
+        # Persist state
+        await write_state_primary(
+            session_id,
+            {
+                "session_id": session_id,
+                "user_id": current_user.id,
+                "question": question,
+                "context_files": file_paths,
+                "ingested_data": ingested_data,
+                "current_step": "build",
+                "status": "idle",
+                "created_at": created_at.isoformat()
+            },
+            db=db,
+            user_id=current_user.id
+        )
         
         # Update database metadata (for listing/filtering only)
         await SessionService.update_session_metadata(
@@ -322,12 +376,17 @@ async def build_council(
         
         # Clear any stale execution/review data on rebuild
         if force:
-            session_manager.update_state(session_id, {
-                "execution_results": None,
-                "peer_reviews": None,
-                "aggregated_scores": None,
-                "chairman_verdict": None
-            })
+            await write_state_primary(
+                session_id,
+                {
+                    "execution_results": None,
+                    "peer_reviews": None,
+                    "aggregated_scores": None,
+                    "chairman_verdict": None
+                },
+                db=db,
+                user_id=current_user.id
+            )
         
         question = state["question"]
         ingested_data = state.get("ingested_data", [])
@@ -343,13 +402,18 @@ async def build_council(
             logger=logger
         )
         
-        # Update file-based state (primary)
+        # Update state (DB primary, file fallback)
         tokens = logger.get_cost_breakdown()
-        session_manager.update_state(session_id, {
-            "council_config": council_config,
-            "current_step": "edit",
-            "tokens": tokens
-        })
+        await write_state_primary(
+            session_id,
+            {
+                "council_config": council_config,
+                "current_step": "edit",
+                "tokens": tokens
+            },
+            db=db,
+            user_id=current_user.id
+        )
         
         # Update database metadata (for listing/filtering)
         await SessionService.update_session_metadata(
@@ -398,11 +462,15 @@ async def update_council(
         # Authorize access
         await authorize_session_access(session_id, current_user.id, db)
         
-        # Update file-based state (primary)
-        session_manager.update_state(session_id, {
-            "council_config": council_config.dict(),
-            "current_step": "execute"
-        })
+        await write_state_primary(
+            session_id,
+            {
+                "council_config": council_config.dict(),
+                "current_step": "execute"
+            },
+            db=db,
+            user_id=current_user.id
+        )
         
         # Update database metadata (for listing/filtering)
         await SessionService.update_session_metadata(
@@ -422,81 +490,93 @@ async def update_council(
 async def execute_council_task(session_id: str):
     """
     Background task to execute the council.
-    Uses file-based state.json to avoid database lock contention.
+    Uses DB state (JSONB) with batched progress updates; falls back to file for SQLite.
     """
     print(f"[EXECUTE_TASK] Starting execution for {session_id}")
     try:
-        # Use file-based state for background task (avoids DB locks)
-        state = session_manager.get_state(session_id)
-        if not state:
-            print(f"[EXECUTE_TASK] Error: Session {session_id} not found")
-            return
-        
-        print(f"[EXECUTE_TASK] State loaded for {session_id}, starting execution...")
-        
-        council_config = state["council_config"]
-        question = state["question"]
-        ingested_data = state.get("ingested_data", [])
-        
-        # Create logger (no DB access needed)
-        logs_dir = Path("sessions") / session_id / "logs"
-        logs_dir.mkdir(parents=True, exist_ok=True)
-        logger = SessionLogger(output_dir=str(logs_dir))
-        print(f"[EXECUTE_TASK] Logger created for {session_id}")
-        
-        # Simple progress callback that writes to file
-        def progress_cb(agent_name: str, status: str):
-            session_manager.update_state(session_id, {
-                "execution_status": {agent_name: status}
-            })
-        
-        print(f"[EXECUTE_TASK] About to execute council for {session_id}")
-        
-        execution_results = await AgentCouncilService.execute_council(
-            council_config,
-            question,
-            ingested_data,
-            progress_callback=progress_cb,
-            logger=logger
-        )
-        
-        print(f"[EXECUTE_TASK] Execution completed for {session_id}, updating state...")
-        
-        # Update file-based state
-        tokens = logger.get_cost_breakdown()
-        session_manager.update_state(session_id, {
-            "execution_results": execution_results,
-            "current_step": "review",
-            "status": "execution_complete",
-            "tokens": tokens
-        })
-        
-        print(f"[EXECUTE_TASK] State updated to file for {session_id}")
-        
-        # Sync status to database (single write, less critical)
-        try:
-            async with AsyncSessionLocal() as db:
-                await SessionService.update_session_metadata(db, session_id, {
+        async with AsyncSessionLocal() as db:
+            state = await read_state_primary(session_id, db)
+            if not state:
+                print(f"[EXECUTE_TASK] Error: Session {session_id} not found")
+                return
+            
+            print(f"[EXECUTE_TASK] State loaded for {session_id}, starting execution...")
+            
+            council_config = state["council_config"]
+            question = state["question"]
+            ingested_data = state.get("ingested_data", [])
+            
+            # Create logger
+            logs_dir = Path("sessions") / session_id / "logs"
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            logger = SessionLogger(output_dir=str(logs_dir))
+            print(f"[EXECUTE_TASK] Logger created for {session_id}")
+            
+            # Progress callback -> batched DB updates or file fallback
+            if USE_DB_STATE:
+                def progress_cb(agent_name: str, status: str):
+                    asyncio.create_task(
+                        SessionStateService.update_state_batched(
+                            session_id,
+                            {"execution_status": {agent_name: status}},
+                            user_id=None
+                        )
+                    )
+            else:
+                def progress_cb(agent_name: str, status: str):
+                    session_manager.update_state(session_id, {
+                        "execution_status": {agent_name: status}
+                    })
+            
+            print(f"[EXECUTE_TASK] About to execute council for {session_id}")
+            
+            execution_results = await AgentCouncilService.execute_council(
+                council_config,
+                question,
+                ingested_data,
+                progress_callback=progress_cb,
+                logger=logger
+            )
+            
+            print(f"[EXECUTE_TASK] Execution completed for {session_id}, updating state...")
+            
+            # Final state update
+            tokens = logger.get_cost_breakdown()
+            await write_state_primary(
+                session_id,
+                {
+                    "execution_results": execution_results,
                     "current_step": "review",
                     "status": "execution_complete",
-                    "last_cost_usd": tokens.get("total_cost_usd"),
-                    "last_total_tokens": tokens.get("total_tokens")
-                })
-                await db.commit()
-                print(f"[EXECUTE_TASK] Status synced to DB for {session_id}")
-        except Exception as e:
-            print(f"Warning: Could not sync status to DB: {e}")
-        
+                    "tokens": tokens
+                },
+                db=db
+            )
+            await SessionService.update_session_metadata(db, session_id, {
+                "current_step": "review",
+                "status": "execution_complete",
+                "last_cost_usd": tokens.get("total_cost_usd"),
+                "last_total_tokens": tokens.get("total_tokens")
+            })
+            await db.commit()
+            print(f"[EXECUTE_TASK] State updated for {session_id}")
+
     except Exception as e:
         print(f"Error in execute_council_task: {e}")
         import traceback
         traceback.print_exc()
         
         try:
-            session_manager.update_state(session_id, {
-                "execution_error": str(e),
-                "status": "execution_error"
-            })
+            async with AsyncSessionLocal() as db:
+                await SessionStateService.update_state(
+                    db,
+                    session_id,
+                    {
+                        "execution_error": str(e),
+                        "status": "execution_error"
+                    }
+                )
+                await db.commit()
         except Exception as e2:
             print(f"Error updating error state: {e2}")
 
@@ -547,21 +627,31 @@ async def execute_council(
             
             # Clear previous results if forcing re-execution
             if force and state.get("execution_results"):
-                session_manager.update_state(session_id, {
-                    "execution_results": None,
-                    "execution_status": {},
-                    "execution_error": None,
-                    "peer_reviews": None,
-                    "aggregated_scores": None,
-                    "chairman_verdict": None
-                })
+                await write_state_primary(
+                    session_id,
+                    {
+                        "execution_results": None,
+                        "execution_status": {},
+                        "execution_error": None,
+                        "peer_reviews": None,
+                        "aggregated_scores": None,
+                        "chairman_verdict": None
+                    },
+                    db=db,
+                    user_id=current_user.id
+                )
             
             # Set status to executing in file
             print(f"[EXECUTE_ENDPOINT] Setting status to executing for {session_id}")
-            session_manager.update_state(session_id, {
-                "status": "executing",
-                "current_step": "execute"
-            })
+            await write_state_primary(
+                session_id,
+                {
+                    "status": "executing",
+                    "current_step": "execute"
+                },
+                db=db,
+                user_id=current_user.id
+            )
             
             # Update DB metadata
             await SessionService.update_session_metadata(db, session_id, {
@@ -677,69 +767,76 @@ async def get_results(
 async def peer_review_task(session_id: str):
     """
     Background task to run peer review.
-    Uses file-based state.json to avoid database lock contention.
+    Uses DB state with batched progress updates; falls back to file for SQLite.
     """
     print(f"[REVIEW_TASK] Starting peer review for {session_id}")
     try:
-        # Use file-based state
-        state = session_manager.get_state(session_id)
-        if not state:
-            print(f"[REVIEW_TASK] Error: Session {session_id} not found")
-            return
-        
-        council_config = state["council_config"]
-        question = state["question"]
-        execution_results = state["execution_results"]["execution_results"]
-        
-        # Create logger
-        logs_dir = Path("sessions") / session_id / "logs"
-        logs_dir.mkdir(parents=True, exist_ok=True)
-        logger = SessionLogger(output_dir=str(logs_dir))
-        
-        # Simple progress callback that writes to file
-        def progress_cb(agent_name: str, status: str):
-            session_manager.update_state(session_id, {
-                "review_status": {agent_name: status}
-            })
-        
-        peer_reviews = await AgentCouncilService.run_peer_review(
-            council_config,
-            question,
-            execution_results,
-            progress_callback=progress_cb,
-            logger=logger
-        )
-        
-        # Aggregate scores
-        aggregated_scores = AgentCouncilService.aggregate_reviews(
-            execution_results,
-            peer_reviews
-        )
-        
-        # Update file-based state
-        tokens = logger.get_cost_breakdown()
-        session_manager.update_state(session_id, {
-            "peer_reviews": peer_reviews,
-            "aggregated_scores": aggregated_scores,
-            "current_step": "synthesize",
-            "status": "review_complete",
-            "tokens": tokens
-        })
-        
-        print(f"[REVIEW_TASK] Peer review completed for {session_id}")
-        
-        # Sync status to database
-        try:
-            async with AsyncSessionLocal() as db:
-                await SessionService.update_session_metadata(db, session_id, {
+        async with AsyncSessionLocal() as db:
+            state = await read_state_primary(session_id, db)
+            if not state:
+                print(f"[REVIEW_TASK] Error: Session {session_id} not found")
+                return
+            
+            council_config = state["council_config"]
+            question = state["question"]
+            execution_results = state["execution_results"]["execution_results"]
+            
+            # Create logger
+            logs_dir = Path("sessions") / session_id / "logs"
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            logger = SessionLogger(output_dir=str(logs_dir))
+            
+            # Progress callback -> batched DB updates or file fallback
+            if USE_DB_STATE:
+                def progress_cb(agent_name: str, status: str):
+                    asyncio.create_task(
+                        SessionStateService.update_state_batched(
+                            session_id,
+                            {"review_status": {agent_name: status}},
+                            user_id=None
+                        )
+                    )
+            else:
+                def progress_cb(agent_name: str, status: str):
+                    session_manager.update_state(session_id, {
+                        "review_status": {agent_name: status}
+                    })
+            
+            peer_reviews = await AgentCouncilService.run_peer_review(
+                council_config,
+                question,
+                execution_results,
+                progress_callback=progress_cb,
+                logger=logger
+            )
+            
+            # Aggregate scores
+            aggregated_scores = AgentCouncilService.aggregate_reviews(
+                execution_results,
+                peer_reviews
+            )
+            
+            # Update state
+            tokens = logger.get_cost_breakdown()
+            await write_state_primary(
+                session_id,
+                {
+                    "peer_reviews": peer_reviews,
+                    "aggregated_scores": aggregated_scores,
                     "current_step": "synthesize",
                     "status": "review_complete",
-                    "last_cost_usd": tokens.get("total_cost_usd"),
-                    "last_total_tokens": tokens.get("total_tokens")
-                })
-                await db.commit()
-        except Exception as e:
-            print(f"Warning: Could not sync review status to DB: {e}")
+                    "tokens": tokens
+                },
+                db=db
+            )
+            await SessionService.update_session_metadata(db, session_id, {
+                "current_step": "synthesize",
+                "status": "review_complete",
+                "last_cost_usd": tokens.get("total_cost_usd"),
+                "last_total_tokens": tokens.get("total_tokens")
+            })
+            await db.commit()
+            print(f"[REVIEW_TASK] Peer review completed for {session_id}")
         
     except Exception as e:
         print(f"Error in peer_review_task: {e}")
@@ -747,10 +844,16 @@ async def peer_review_task(session_id: str):
         traceback.print_exc()
         
         try:
-            session_manager.update_state(session_id, {
-                "review_error": str(e),
-                "status": "review_error"
-            })
+            async with AsyncSessionLocal() as db:
+                await SessionStateService.update_state(
+                    db,
+                    session_id,
+                    {
+                        "review_error": str(e),
+                        "status": "review_error"
+                    }
+                )
+                await db.commit()
         except Exception as e2:
             print(f"Error updating error state: {e2}")
 
@@ -799,19 +902,29 @@ async def peer_review(
             
             # Clear previous reviews if forcing re-run
             if force and state.get("peer_reviews"):
-                session_manager.update_state(session_id, {
-                    "peer_reviews": None,
-                    "aggregated_scores": None,
-                    "review_status": {},
-                    "review_error": None,
-                    "chairman_verdict": None
-                })
+                await write_state_primary(
+                    session_id,
+                    {
+                        "peer_reviews": None,
+                        "aggregated_scores": None,
+                        "review_status": {},
+                        "review_error": None,
+                        "chairman_verdict": None
+                    },
+                    db=db,
+                    user_id=current_user.id
+                )
             
             # Set status to reviewing in file
-            session_manager.update_state(session_id, {
-                "status": "reviewing",
-                "current_step": "review"
-            })
+            await write_state_primary(
+                session_id,
+                {
+                    "status": "reviewing",
+                    "current_step": "review"
+                },
+                db=db,
+                user_id=current_user.id
+            )
             
             # Update DB metadata
             await SessionService.update_session_metadata(db, session_id, {
@@ -942,14 +1055,19 @@ async def synthesize(
         # Finalize logger
         logger.finalize()
         
-        # Update file-based state
+        # Update state
         tokens = logger.get_cost_breakdown()
-        session_manager.update_state(session_id, {
-            "chairman_verdict": final_verdict,
-            "current_step": "complete",
-            "status": "verdict_complete",
-            "tokens": tokens
-        })
+        await write_state_primary(
+            session_id,
+            {
+                "chairman_verdict": final_verdict,
+                "current_step": "complete",
+                "status": "verdict_complete",
+                "tokens": tokens
+            },
+            db=db,
+            user_id=current_user.id
+        )
         
         # Update DB metadata
         await SessionService.update_session_metadata(db, session_id, {

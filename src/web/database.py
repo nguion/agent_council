@@ -6,34 +6,40 @@ import os
 from datetime import datetime
 from typing import AsyncGenerator
 from sqlalchemy import Boolean, Column, DateTime, String, Float, Integer, ForeignKey, Text, JSON, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base, relationship
 
 # Database URL - use SQLite for dev, PostgreSQL for production
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./agent_council.db")
 
-# Determine if we're using SQLite
+# Determine DB flavor
 _is_sqlite = DATABASE_URL.startswith("sqlite")
+_is_postgres = DATABASE_URL.startswith("postgres")
+
+# Exported flags
+IS_SQLITE = _is_sqlite
+IS_POSTGRES = _is_postgres
+
+# Engine kwargs
+_engine_kwargs = dict(echo=False, future=True)
+
+# Connection/pool tuning
+if not _is_sqlite:
+    # Modest defaults suitable for ~10–20 concurrent connections
+    _engine_kwargs.update(
+        pool_size=int(os.getenv("DB_POOL_SIZE", "10")),
+        max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "20"))
+    )
 
 # Create async engine with appropriate config
 if _is_sqlite:
-    # SQLite-specific configuration
-    engine = create_async_engine(
-        DATABASE_URL,
-        echo=False,
-        future=True,
-        connect_args={
-            "timeout": 30,  # 30 second timeout for lock waits
-            "check_same_thread": False
-        }
-    )
-else:
-    # PostgreSQL or other DB
-    engine = create_async_engine(
-        DATABASE_URL,
-        echo=False,
-        future=True
-    )
+    _engine_kwargs["connect_args"] = {
+        "timeout": 30,
+        "check_same_thread": False
+    }
+
+engine = create_async_engine(DATABASE_URL, **_engine_kwargs)
 
 # Create async session factory
 AsyncSessionLocal = async_sessionmaker(
@@ -76,11 +82,24 @@ class Session(Base):
     last_cost_usd = Column(Float, nullable=True)
     last_total_tokens = Column(Integer, nullable=True)
     
-    # Full session state as JSON (replaces state.json files)
-    state = Column(JSON, nullable=True)
-    
     # Relationship
     user = relationship("User", back_populates="sessions")
+
+
+def _state_json_type():
+    """Return JSON column type appropriate for the backend."""
+    if _is_postgres:
+        return JSONB
+    return JSON
+
+
+class SessionState(Base):
+    """Primary store for session state (JSON/JSONB)."""
+    __tablename__ = "session_state"
+
+    session_id = Column(String, primary_key=True)
+    state = Column(_state_json_type(), nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -109,3 +128,10 @@ async def init_db():
             await conn.execute(text("PRAGMA busy_timeout=60000"))
             # Set synchronous to NORMAL for better performance (safest is FULL, but NORMAL is usually fine)
             await conn.execute(text("PRAGMA synchronous=NORMAL"))
+        elif _is_postgres:
+            # Optional GIN index for JSONB queries
+            try:
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_session_state_state_gin ON session_state USING gin (state)"))
+            except Exception as e:
+                # Non-fatal; continue startup
+                print(f"Warning: could not create GIN index on session_state: {e}")

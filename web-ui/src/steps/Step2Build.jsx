@@ -13,7 +13,6 @@ export const Step2Build = () => {
   const [loading, setLoading] = useState(false);
   const [councilConfig, setCouncilConfig] = useState(null);
   const [error, setError] = useState(null);
-  const [savingConfig, setSavingConfig] = useState(false);
   
   useEffect(() => {
     // Check if council already exists in session data
@@ -48,20 +47,6 @@ export const Step2Build = () => {
     }
   };
   
-  const handleSkipEditing = async () => {
-    try {
-      setSavingConfig(true);
-      setError(null);
-      await agentCouncilAPI.updateCouncil(sessionId, councilConfig);
-      await refreshSession();
-      navigate(`/sessions/${sessionId}/execute`);
-    } catch (err) {
-      console.error('Skip editing error:', err);
-      setError(err.response?.data?.detail || err.message || 'Failed to save council configuration');
-      setSavingConfig(false);
-    }
-  };
-  
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto py-12 px-4">
@@ -92,10 +77,7 @@ export const Step2Build = () => {
               </h3>
               <p className="text-gray-600">{error}</p>
             </div>
-            <div className="flex justify-center space-x-4 mt-6">
-              <Button variant="secondary" onClick={() => navigate('/')}>
-                Go Back
-              </Button>
+            <div className="flex justify-center mt-6">
               <Button onClick={buildCouncil}>
                 Try Again
               </Button>
@@ -185,25 +167,13 @@ export const Step2Build = () => {
       
       {/* Actions */}
       <div className="bg-white rounded-lg shadow-md border-2 border-primary-200 p-6">
-        <div className="flex justify-between items-center">
-          <Button variant="secondary" onClick={() => navigate('/')} disabled={savingConfig}>
-            ← Back
+        <div className="flex justify-start">
+          <Button
+            onClick={() => navigate(`/sessions/${sessionId}/edit`)}
+            disabled={!councilConfig}
+          >
+            Review & Edit Council →
           </Button>
-          <div className="flex space-x-3">
-            <Button 
-              variant="secondary" 
-              onClick={handleSkipEditing}
-              disabled={savingConfig || !councilConfig}
-            >
-              {savingConfig ? 'Saving...' : 'Skip Editing'}
-            </Button>
-            <Button 
-              onClick={() => navigate(`/sessions/${sessionId}/edit`)}
-              disabled={savingConfig || !councilConfig}
-            >
-              Review & Edit Council →
-            </Button>
-          </div>
         </div>
       </div>
     </div>

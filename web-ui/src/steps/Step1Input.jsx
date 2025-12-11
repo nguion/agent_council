@@ -73,20 +73,9 @@ export const Step1Input = () => {
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
       <div className="text-center mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex-1"></div>
-          <h2 className="text-3xl font-bold text-gray-900 flex-1">
+        <h2 className="text-3xl font-bold text-gray-900 mb-2">
           What problem do you want the council to solve?
         </h2>
-          <div className="flex-1 flex justify-end">
-            <Link to="/sessions">
-              <Button variant="secondary" className="text-sm">
-                <List className="h-4 w-4 mr-2" />
-                View Sessions
-              </Button>
-            </Link>
-          </div>
-        </div>
         <p className="text-gray-600">
           Provide your core question and optionally add context files to help the agents understand the problem better.
         </p>
