@@ -32,7 +32,7 @@ export const Stepper = ({ currentStep, allowedSteps = [], onStepSelect }) => {
                       ? 'bg-primary-600 text-white ring-4 ring-primary-100 scale-105 shadow-md'
                       : isComplete
                         ? 'bg-primary-50 text-primary-800 border border-primary-200'
-                        : 'bg-gray-100 text-gray-400 border border-gray-200'
+                      : 'bg-gray-100 text-gray-400 border border-gray-200'
                   }
                   flex-1 text-center
                   ${isEnabled ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary-200' : 'cursor-not-allowed opacity-75'}
