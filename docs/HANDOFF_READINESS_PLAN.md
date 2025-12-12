@@ -27,6 +27,7 @@
   - Added containerization support (`Dockerfile`, `docker-compose.yml`) (part of PR-3)
   - Added CI baseline (`.github/workflows/ci.yml`) (part of PR-4)
   - Enhanced test coverage (34 tests, up from 15) including auth, file uploads, and edge cases (part of PR-4.1)
+  - Added Alembic migrations baseline (part of PR-5)
 - **Open decisions**:
   - Hosting platform — Owner: SRE/Platform — Due: Handoff
   - Queue/worker system — Owner: Backend + SRE — Due: Sprint 3
@@ -588,8 +589,27 @@ This section is the “ready to execute” slice: each PR is scoped to be review
    - **Progress notes**:
      - 2025-12-12: Proposed as enhancement to PR-4.
      - 2025-12-12: Added `tests/test_auth.py` (10 tests), `tests/test_file_uploads.py` (7 tests, 3 skipped for PR-7), `tests/conftest.py` (shared fixtures), and enhanced `tests/test_api_integration.py` (added 7 new edge case tests). Total test count increased from 15 to 34 passing tests. All tests pass.
-5. **PR-5 Alembic baseline**
+5. **PR-5 Alembic baseline** — **Done**
    - Introduce Alembic migrations for current DB schema and future additions (roles/audit tables).
+   - **Execution plan (this session)**:
+     - **Steps**:
+       - Initialize Alembic (`alembic init alembic`).
+       - Configure `alembic/env.py` for async SQLAlchemy (critical for async/await support).
+       - Create initial migration from current schema (`users`, `sessions`, `session_state`).
+       - Update `src/web/database.py` `init_db()` to run migrations instead of `create_all()`.
+       - Preserve SQLite pragmas and PostgreSQL GIN index creation in migration or init logic.
+       - Test: Run migrations on fresh DB and verify schema matches.
+     - **Files to touch**:
+       - `alembic/` (new directory)
+       - `alembic.ini` (new)
+       - `src/web/database.py` (update `init_db()`)
+     - **Acceptance criteria**:
+       - `alembic upgrade head` creates all tables correctly.
+       - `init_db()` runs migrations instead of `create_all()`.
+       - Existing database continues to work (backward compatible).
+   - **Progress notes**:
+     - 2025-12-12: Started PR-5.
+     - 2025-12-12: Initialized Alembic, configured for async SQLAlchemy, created initial migration (revision `950bd54c7a60`). Updated `init_db()` to use migrations with fallback for legacy databases. Migrations handle SQLite pragmas and PostgreSQL GIN indexes. Tested: fresh DB migration works, existing DBs are auto-stamped.
 6. **PR-6 RBAC skeleton**
    - Add roles + `require_role()` dependency.
    - Add first admin-only endpoint (e.g., `/api/admin/metrics/summary` returning placeholders).

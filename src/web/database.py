@@ -16,6 +16,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    pool,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -128,22 +129,74 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db():
-    """Initialize database tables."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        
-        # Enable WAL mode for SQLite to reduce lock contention
-        if _is_sqlite:
-            # WAL mode allows concurrent readers and one writer
-            await conn.execute(text("PRAGMA journal_mode=WAL"))
-            # Increase busy timeout to 60 seconds
-            await conn.execute(text("PRAGMA busy_timeout=60000"))
-            # Set synchronous to NORMAL for better performance (safest is FULL, but NORMAL is usually fine)
-            await conn.execute(text("PRAGMA synchronous=NORMAL"))
-        elif _is_postgres:
-            # Optional GIN index for JSONB queries
-            try:
-                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_session_state_state_gin ON session_state USING gin (state)"))
-            except Exception as e:
-                # Non-fatal; continue startup
-                print(f"Warning: could not create GIN index on session_state: {e}")
+    """Initialize database tables using Alembic migrations."""
+    # AI Generated Code by Deloitte + Cursor (BEGIN)
+    from alembic.config import Config
+    from alembic import command
+    from alembic.runtime.migration import MigrationContext
+    from sqlalchemy import create_engine, inspect
+    
+    # Convert async URL to sync for Alembic
+    sync_url = DATABASE_URL
+    if sync_url.startswith("sqlite+aiosqlite"):
+        sync_url = sync_url.replace("sqlite+aiosqlite", "sqlite")
+    elif sync_url.startswith("postgresql+asyncpg"):
+        sync_url = sync_url.replace("postgresql+asyncpg", "postgresql")
+    
+    # Create sync engine for Alembic
+    connect_args = {}
+    if _is_sqlite:
+        connect_args = {"timeout": 30, "check_same_thread": False}
+    
+    sync_engine = create_engine(
+        sync_url,
+        poolclass=pool.NullPool,
+        connect_args=connect_args,
+        echo=False
+    )
+    
+    # Load Alembic config
+    alembic_cfg = Config("alembic.ini")
+    
+    try:
+        with sync_engine.connect() as connection:
+            # Check if database has tables but no Alembic version (legacy create_all() DB)
+            inspector = inspect(sync_engine)
+            tables = inspector.get_table_names()
+            has_tables = len(tables) > 0
+            
+            context = MigrationContext.configure(connection)
+            current_rev = context.get_current_revision()
+            
+            # If tables exist but no revision, stamp with head (assumes schema matches)
+            if has_tables and current_rev is None:
+                # Check if core tables exist (users, sessions, session_state)
+                required_tables = {"users", "sessions", "session_state"}
+                if required_tables.issubset(set(tables)):
+                    # Stamp database as being at head revision
+                    alembic_cfg.attributes["connection"] = connection
+                    command.stamp(alembic_cfg, "head")
+                    print("Stamped existing database with current Alembic revision")
+                else:
+                    # Schema mismatch - run migrations
+                    alembic_cfg.attributes["connection"] = connection
+                    command.upgrade(alembic_cfg, "head")
+                    print("Database migrated to latest schema")
+            else:
+                # Normal migration path
+                alembic_cfg.attributes["connection"] = connection
+                command.upgrade(alembic_cfg, "head")
+                if current_rev:
+                    print(f"Database migrated from {current_rev} to head")
+                else:
+                    print("Database migrations completed successfully")
+    except Exception as e:
+        print(f"Warning: Alembic migration failed: {e}")
+        # Fallback for dev: ensure tables exist
+        # In production, migrations should always succeed
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            print("Warning: Fell back to create_all() due to migration failure")
+    finally:
+        sync_engine.dispose()
+    # AI Generated Code by Deloitte + Cursor (END)
