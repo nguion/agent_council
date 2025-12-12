@@ -17,18 +17,19 @@
 
 ### Status (active execution)
 - **Last updated**: 2025-12-12 (UTC) by Cursor (GPT-5.2)
-- **Current sprint**: Sprint 1 — Make the repo trustworthy + establish security posture (Handoff Polish)
+- **Current sprint**: Sprint 1 — **COMPLETE** ✅ | Next: Sprint 2 — Admin telemetry + audit logs + quotas/rate limits
 - **In progress**:
-  - (none)
-- **Completed this sprint**:
-  - `docs/ARCHITECTURE.md` rewritten to match current DB-first `session_state` + local filesystem artifacts (part of PR-1)
-  - Added v1 docs for Data Handling, Security Model, Privacy, and Runbook (part of PR-1)
-  - Fixed `scripts/verify_setup.py` and added `.env.example` files (part of PR-2)
-  - Added containerization support (`Dockerfile`, `docker-compose.yml`) (part of PR-3)
-  - Added CI baseline (`.github/workflows/ci.yml`) (part of PR-4)
-  - Enhanced test coverage (34 tests, up from 15) including auth, file uploads, and edge cases (part of PR-4.1)
-  - Added Alembic migrations baseline (part of PR-5)
-  - Added RBAC skeleton with role enforcement and admin-only endpoint (part of PR-6)
+  - (none) — Ready for Sprint 2
+- **Completed Sprint 1**:
+  - ✅ `docs/ARCHITECTURE.md` rewritten to match current DB-first `session_state` + local filesystem artifacts (PR-1)
+  - ✅ Added v1 docs for Data Handling, Security Model, Privacy, and Runbook (PR-1)
+  - ✅ Fixed `scripts/verify_setup.py` and added `.env.example` files (PR-2)
+  - ✅ Added containerization support (`Dockerfile`, `docker-compose.yml`) (PR-3)
+  - ✅ Added CI baseline (`.github/workflows/ci.yml`) (PR-4)
+  - ✅ Enhanced test coverage (40 tests, up from 15) including auth, file uploads, RBAC, and edge cases (PR-4.1, PR-6)
+  - ✅ Added Alembic migrations baseline with comprehensive test suite (PR-5)
+  - ✅ Added RBAC skeleton with role enforcement, validation, docs, and admin-only endpoint (PR-6)
+  - ✅ RBAC enhancements: role validation, `UserService.update_role()`, promotion script, updated docs (PR-6 follow-up)
 - **Open decisions**:
   - Hosting platform — Owner: SRE/Platform — Due: Handoff
   - Queue/worker system — Owner: Backend + SRE — Due: Sprint 3
@@ -667,9 +668,27 @@ This section is the “ready to execute” slice: each PR is scoped to be review
          - Tests migration application
        - ✅ All 40 tests pass (34 existing + 6 new RBAC tests)
        - **Result**: RBAC foundation is complete. Admin endpoint is protected and working. Ready for Sprint 2 admin dashboard implementation.
+   - **Progress notes** (continued):
+     - 2025-12-12: **RBAC enhancements completed**:
+       - ✅ Added role validation: CheckConstraint for PostgreSQL, app-level for SQLite
+       - ✅ Updated `docs/SECURITY_MODEL.md`: RBAC marked as implemented (not planned)
+       - ✅ Updated `docs/ARCHITECTURE.md`: Added comprehensive RBAC section
+       - ✅ Added `UserService.update_role()` method for role management
+       - ✅ Created `scripts/promote_user_to_admin.py` utility for dev/testing
+       - ✅ All 6 RBAC tests still pass
+       - **Result**: RBAC foundation is production-ready with validation, documentation, and utilities.
    - **Traceability**:
-     - Commit: `rbac: PR-6 RBAC skeleton with role enforcement`
-     - Files changed: `alembic/versions/8b746e4b0150_*.py` (new), `src/web/database.py`, `src/web/db_service.py`, `src/web/api.py`, `tests/test_rbac.py` (new)
+     - Commits: 
+       - `rbac: PR-6 RBAC skeleton with role enforcement` (3aa09b8)
+       - `rbac: Enhance RBAC foundation with validation, docs, and utilities` (75aac84)
+     - Files changed: 
+       - `alembic/versions/8b746e4b0150_*.py` (new migration)
+       - `src/web/database.py` (User model + CheckConstraint)
+       - `src/web/db_service.py` (default role + update_role method)
+       - `src/web/api.py` (require_role dependency + admin endpoint)
+       - `tests/test_rbac.py` (new, 6 tests)
+       - `scripts/promote_user_to_admin.py` (new utility)
+       - `docs/SECURITY_MODEL.md`, `docs/ARCHITECTURE.md` (updated)
 7. **PR-7 Security guardrails**
    - Upload allow-list + max size + env kill-switches.
    - `DISABLE_WEB_SEARCH=true` enforced server-side.
