@@ -1,6 +1,82 @@
 <!-- AI Generated Code by Deloitte + Cursor (BEGIN) -->
 ## Agent Council — Internal Deployment Readiness Plan (Handoff Roadmap)
 
+### Instructions for usage (mandatory for any agent/contributor)
+- **This plan is the single source of truth** for handoff-readiness work. If you execute tasks from it, you must keep it current so others can review progress.
+- **Priority #1 (besides code quality): keep this file accurate.** Do not let work happen “in chat only” or in private notes.
+- **Update the plan as you work**, not after:
+  - When you start a task: mark it **in progress**.
+  - When you finish: mark it **done** and add links (PR/commit) and notes (what changed, why).
+  - When you discover new risks/requirements: add them to the plan with an owner and proposed mitigation.
+  - When you change scope/order: record the change and rationale (so the next team understands).
+- **Annotate decisions and unknowns**:
+  - Keep a decision log (hosting/queue/storage/retention) and record the current default, owner, and due date.
+- **Always include traceability**:
+  - Reference the exact files touched and (when available) PR/commit identifiers.
+
+### Status (active execution)
+- **Last updated**: 2025-12-12 (UTC) by Cursor (GPT-5.2)
+- **Current sprint**: Sprint 1 — Make the repo trustworthy + establish security posture (Handoff Polish)
+- **In progress**:
+  - PR-1 Docs alignment
+- **Completed this sprint**:
+  - `docs/ARCHITECTURE.md` rewritten to match current DB-first `session_state` + local filesystem artifacts (part of PR-1)
+- **Open decisions**:
+  - Hosting platform — Owner: SRE/Platform — Due: Handoff
+  - Queue/worker system — Owner: Backend + SRE — Due: Sprint 3
+  - Artifact storage — Owner: Backend + SRE — Due: Sprint 3
+  - SSO mode — Owner: SSO/Identity — Due: Sprint 1–2
+  - Uploads allowed in prod — Owner: Security/Risk — Due: Sprint 1
+  - Prompt/response logging policy — Owner: Security/Risk — Due: Sprint 2
+  - Retention window — Owner: Security/Risk — Due: Sprint 2
+- **Risks / blockers**:
+  - In-process BackgroundTasks are not durable/scale-safe (mitigation: JobRunner seam in Sprint 3)
+  - Local filesystem artifacts won’t work in multi-instance deployments (mitigation: StorageProvider seam in Sprint 3)
+  - Sensitive data boundary + logging policy not yet explicit enough (mitigation: docs + guardrails in Sprints 1–2)
+  - `session_state` row bloat from extracted text (mitigation: refactor in Sprint 3)
+
+#### Recommended “status block” format (keep at the top of the plan during active execution)
+- **Last updated**: YYYY-MM-DD (UTC) by <name>
+- **Current sprint**: Sprint N (dates)
+- **In progress**: bullets
+- **Completed this sprint**: bullets (+ PR/commit links)
+- **Open decisions**: bullets (owner + due)
+- **Risks / blockers**: bullets (mitigation)
+
+### Read this first (context from the repo owner)
+This plan is written as if Agent Council will be deployed internally at Deloitte to **~10,000 potential users**, but the goal of this repo (today) is **handoff readiness**, not a firm-wide rollout yet.
+
+#### Why this exists
+- The repo currently works as a prototype, but **enterprise expectations** (security, auditability, operability, scale, and developer experience) need to be made explicit and engineered for.
+- We want this repo to be something a skilled internal team can pick up and **immediately trust**, not a fragile demo.
+
+#### Hard constraints / commitments (from the owner)
+- **LLM provider**: The **current OpenAI API integration is the right one for now** (we are not switching providers in this roadmap).
+- **Hosting**: We **do not know the final hosting platform yet**. This plan intentionally stays **deployment-agnostic** and focuses on clean seams (containers, configuration, abstractions) so the handoff team can deploy on AKS/App Service/Container Apps/etc.
+- **SSO**: Deloitte SSO will be **Microsoft-based (Entra ID / Azure AD)**.
+  - The repo owner will not implement full Entra login UX end-to-end.
+  - We will build a clean **SSO integration contract** and safe **stubbed dev mode**, so an identity team can wire it correctly later.
+- **Repo ownership / intent**: The core work remains in the repo owner’s GitHub for now; this plan is about making the codebase **clean and handoff-ready** for an internal engineering team to adopt.
+- **Do not break what works**: We should go far, but avoid overstepping—keep the app runnable locally throughout, and prefer incremental PRs over rewrites.
+- **Security clarity is mandatory**: Risk/Compliance concerns (especially around **client documents**, uploads, and “oops I saw someone else’s session”) must be addressed explicitly in docs and enforced in code (ownership, RBAC, audit logs, kill-switches, retention).
+
+#### What “done” means (where this plan starts and ends)
+- **Start state**: Current repo state (FastAPI + React/Vite, DB-backed `session_state`, in-process background tasks, local `sessions/{id}` uploads/logs, OpenAI API calls).
+- **End state (handoff-ready)**:
+  - The repo has clear, accurate docs and runnable tooling (CI, scripts, containerized dev).
+  - Security posture is explicit (what data is stored, what can leave Deloitte, and how isolation is enforced).
+  - RBAC exists (including admin-only capabilities).
+  - An **admin dashboard** exists for cumulative usage/cost/performance visibility.
+  - Durable-job + shared-storage **abstractions (“seams”)** exist so the handoff team can implement real workers/queues/object storage without refactoring business logic.
+  - We are **not** claiming “production rollout to 10k users is complete” inside this repo; we are preparing the foundation so the owning team can do it safely.
+  - This aligns to “Phase 0–3” readiness work (security/ops/scale foundations) and intentionally does **not** include Phase 4 org-wide rollout activities.
+
+#### How to use this plan
+- Treat this document as an **execution backlog for the next 2–3 sprints**.
+- Keep a running **decision log** (hosting, queue, storage, retention policy) so the handoff team doesn’t inherit uncertainty.
+- Prefer **small PRs** with clear acceptance criteria and tests.
+- If you’re new to enterprise deployment/security: follow the acceptance criteria literally, and treat the security/data-handling sections as **non-negotiable** (engage Risk/Identity early when uncertain).
+
 ### Audience
 - This document is written for the internal engineering team that will ultimately own, secure, operate, and scale Agent Council for broad internal use (up to ~10k Deloitte users).
 - It also serves as a “how we got from prototype → handoff-ready” guide for non-experts.
@@ -402,9 +478,28 @@ Keep this table current as decisions get made. Default stance: **track unknowns 
 This section is the “ready to execute” slice: each PR is scoped to be reviewable and reversible.
 
 #### Sprint 1 — suggested PR sequence
-1. **PR-1 Docs alignment**
+1. **PR-1 Docs alignment** — **in progress**
    - Update `docs/ARCHITECTURE.md` to match DB-primary state and in-process BackgroundTasks reality.
    - Add `docs/DATA_HANDLING.md`, `docs/SECURITY_MODEL.md`, `docs/PRIVACY_NOTES.md`, `docs/RUNBOOK.md` stubs (high-level first; iterate later).
+   - **Execution plan (this session)**:
+     - **Steps**:
+       - Read current `docs/ARCHITECTURE.md` and identify mismatches vs code (backend state, auth, background execution, storage).
+       - Update `docs/ARCHITECTURE.md` to accurately describe: API endpoints, DB-first state, filesystem artifacts, auth modes, background tasks, and frontend polling.
+       - Create the 4 new docs as concise “v1” stubs with explicit current behavior + clearly-marked TODOs for policy decisions.
+     - **Files to touch**:
+       - `docs/ARCHITECTURE.md`
+       - `docs/DATA_HANDLING.md` (new)
+       - `docs/SECURITY_MODEL.md` (new)
+       - `docs/PRIVACY_NOTES.md` (new)
+       - `docs/RUNBOOK.md` (new)
+     - **Acceptance criteria**:
+       - `docs/ARCHITECTURE.md` matches current code paths (DB-first state + in-process BackgroundTasks + local filesystem artifacts) without aspirational/incorrect claims.
+       - New docs exist, are internally consistent with the plan’s “Key data handling reality”, and clearly call out open decisions (retention, logging policy, hosting/queue/storage).
+       - No product behavior changes (docs-only PR).
+   - **Progress notes**:
+     - 2025-12-12: Started PR-1. (Traceability will be added as files change.)
+     - 2025-12-12: `docs/ARCHITECTURE.md` currently documents legacy `state.json`-primary behavior; current implementation is DB-backed `session_state` via `SessionStateService`. Updating docs to match current code.
+     - 2025-12-12: Updated `docs/ARCHITECTURE.md` to describe current DB-first state + in-process background tasks + filesystem artifacts. Traceability: PR/commit TBD. Files: `docs/ARCHITECTURE.md`.
 2. **PR-2 DX fixes**
    - Fix `scripts/verify_setup.py` (it currently references removed files and missing docs).
    - Add `.env.example` + `web-ui/.env.example`.
