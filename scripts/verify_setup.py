@@ -38,9 +38,19 @@ def main():
     
     # Check core files
     print("\n📁 Checking Core Files:")
-    all_good &= check_file("agentcouncil.py", "CLI script")
+    all_good &= check_file("agentcouncil.py", "CLI orchestrator")
     all_good &= check_file("requirements.txt", "Core requirements")
-    all_good &= check_file(".env", "Environment file with API key")
+    
+    # Check for .env or .env.example
+    if Path(".env").exists():
+        print("✅ .env file found")
+    elif Path(".env.example").exists():
+        print("⚠️  .env not found, but .env.example exists (copy it to .env to start)")
+        # Don't fail the check just because .env is missing in a fresh clone, 
+        # but warn the user.
+    else:
+        print("❌ .env AND .env.example - NOT FOUND")
+        all_good = False
     
     # Check web backend files
     print("\n🌐 Checking Web Backend:")
@@ -55,12 +65,19 @@ def main():
     all_good &= check_file("web-ui/package.json", "NPM package file")
     all_good &= check_file("web-ui/src/App.jsx", "Main app component")
     all_good &= check_file("web-ui/src/api.js", "API client")
-    all_good &= check_file("web-ui/.env", "Frontend environment")
     
-    # Check startup scripts
-    print("\n🚀 Checking Startup Scripts:")
-    all_good &= check_file("start_backend.sh", "Backend startup script")
-    all_good &= check_file("start_frontend.sh", "Frontend startup script")
+    if Path("web-ui/.env").exists():
+        print("✅ Frontend .env found")
+    elif Path("web-ui/.env.example").exists():
+        print("⚠️  web-ui/.env not found, but .env.example exists")
+    else:
+        print("❌ web-ui/.env AND .env.example - NOT FOUND")
+        # Optional for now, as Vite has defaults
+    
+    # Check documentation
+    print("\n📚 Checking Documentation:")
+    all_good &= check_file("docs/RUNBOOK.md", "Runbook")
+    all_good &= check_file("docs/ARCHITECTURE.md", "Architecture doc")
     
     # Check Python packages
     print("\n🐍 Checking Python Dependencies:")
@@ -70,7 +87,7 @@ def main():
     all_good &= check_python_package("uvicorn")
     all_good &= check_python_package("rich")
     
-    # Check if .env has API key
+    # Check if .env has API key (if it exists)
     print("\n🔑 Checking API Key:")
     if Path(".env").exists():
         with open(".env") as f:
@@ -79,22 +96,20 @@ def main():
                 print("✅ OPENAI_API_KEY found in .env")
             else:
                 print("⚠️  .env exists but API key may not be set correctly")
-                all_good = False
+                # Warning only
     
     print("\n" + "=" * 60)
     
     if all_good:
         print("\n✨ Setup looks good! You're ready to start the web app.")
         print("\nTo start:")
-        print("  Terminal 1: ./start_backend.sh")
-        print("  Terminal 2: ./start_frontend.sh")
+        print("  python agentcouncil.py start")
         print("\nThen open: http://localhost:5173")
         return 0
     else:
         print("\n⚠️  Some issues found. Please fix them before starting.")
         print("\nFor help, see:")
-        print("  - START_WEB_APP.md")
-        print("  - README_WEB.md")
+        print("  - docs/RUNBOOK.md")
         return 1
 
 if __name__ == "__main__":

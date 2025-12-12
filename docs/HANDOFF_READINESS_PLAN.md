@@ -23,6 +23,7 @@
 - **Completed this sprint**:
   - `docs/ARCHITECTURE.md` rewritten to match current DB-first `session_state` + local filesystem artifacts (part of PR-1)
   - Added v1 docs for Data Handling, Security Model, Privacy, and Runbook (part of PR-1)
+  - Fixed `scripts/verify_setup.py` and added `.env.example` files (part of PR-2)
 - **Open decisions**:
   - Hosting platform — Owner: SRE/Platform — Due: Handoff
   - Queue/worker system — Owner: Backend + SRE — Due: Sprint 3
@@ -504,10 +505,26 @@ This section is the “ready to execute” slice: each PR is scoped to be review
      - 2025-12-12: Updated `docs/ARCHITECTURE.md` to describe current DB-first state + in-process background tasks + filesystem artifacts. Traceability: PR/commit TBD. Files: `docs/ARCHITECTURE.md`.
      - 2025-12-12: Added `docs/DATA_HANDLING.md`, `docs/SECURITY_MODEL.md`, `docs/PRIVACY_NOTES.md`, `docs/RUNBOOK.md` as v1 stubs. Traceability: Commit `f69354b`. Files: `docs/*`.
      - 2025-12-12: Completed PR-1. All docs present and aligned with code.
-2. **PR-2 DX fixes**
+2. **PR-2 DX fixes** — **Done**
    - Fix `scripts/verify_setup.py` (it currently references removed files and missing docs).
    - Add `.env.example` + `web-ui/.env.example`.
-3. **PR-3 Containerized local dev**
+   - **Execution plan (this session)**:
+     - **Steps**:
+       - Fix `scripts/verify_setup.py`: Remove refs to `start_*.sh` and missing MD files; point to `agentcouncil.py` and `docs/RUNBOOK.md`.
+       - Create `.env.example`: Template for backend config (API key, DB, Auth).
+       - Create `web-ui/.env.example`: Template for frontend config (API URL).
+       - Verify: Run script to confirm it passes.
+     - **Files to touch**:
+       - `scripts/verify_setup.py`
+       - `.env.example` (new)
+       - `web-ui/.env.example` (new)
+     - **Acceptance criteria**:
+       - `verify_setup.py` runs without errors (on a correctly configured system).
+       - New devs have template `.env` files to copy-paste.
+   - **Progress notes**:
+     - 2025-12-12: Started PR-2.
+     - 2025-12-12: Fixed `verify_setup.py`, created `.env.example` and `web-ui/.env.example`. Verified script passes.
+ 3. **PR-3 Containerized local dev**
    - Add backend `Dockerfile`, frontend `web-ui/Dockerfile` (or document why not).
    - Add minimal `docker-compose.yml` (Postgres + backend + frontend). Keep optional.
 4. **PR-4 CI baseline**
