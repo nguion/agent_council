@@ -13,7 +13,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 # AI Generated Code by Deloitte + Cursor (BEGIN)
 # Add project root to path for imports (so `src.*` namespace imports work)
@@ -120,11 +120,11 @@ async def migrate_sessions():
                 state["session_id"] = session_id
                 state["user_id"] = resolved_user_id
                 if not state.get("created_at"):
-                    state["created_at"] = datetime.utcnow().isoformat()
-                state["updated_at"] = datetime.utcnow().isoformat()
+                    state["created_at"] = datetime.now(timezone.utc).isoformat()
+                state["updated_at"] = datetime.now(timezone.utc).isoformat()
 
                 # Persist DB state
-                db.add(SessionState(session_id=session_id, state=state, updated_at=datetime.utcnow()))
+                db.add(SessionState(session_id=session_id, state=state, updated_at=datetime.now(timezone.utc)))
 
                 # Sync metadata from state
                 if state.get("chairman_verdict"):

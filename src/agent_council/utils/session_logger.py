@@ -5,7 +5,7 @@ Writes a markdown file per session and accumulates token totals and costs.
 
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
 
@@ -62,7 +62,7 @@ class SessionLogger:
     def __init__(self, output_dir: str = "logs"):
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
-        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         self.session_id = f"session_{ts}_{uuid.uuid4().hex[:6]}"
         self.path = os.path.join(self.output_dir, f"{self.session_id}.md")
         self.total_input_tokens = 0
@@ -74,7 +74,7 @@ class SessionLogger:
         with open(self.path, "w", encoding="utf-8") as f:
             f.write(f"# LLM Session Log\n\n")
             f.write(f"- Session: {self.session_id}\n")
-            f.write(f"- Started (UTC): {datetime.utcnow().isoformat()}\n\n")
+            f.write(f"- Started (UTC): {datetime.now(timezone.utc).isoformat()}\n\n")
             f.write("## Calls\n\n")
 
     def log_llm_call(

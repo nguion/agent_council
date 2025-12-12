@@ -4,6 +4,7 @@ FastAPI Application for Agent Council Web Interface.
 
 import asyncio
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, BackgroundTasks, Depends, Header
@@ -21,11 +22,19 @@ from .state_service import SessionStateService, DatabaseBusyError
 from agent_council.utils.session_logger import SessionLogger
 
 
+# Database initialization on startup
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize database on app startup."""
+    await init_db()
+    yield
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Agent Council API",
     description="Web API for the Agent Council system",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # CORS middleware for development
@@ -41,11 +50,6 @@ app.add_middleware(
 session_manager = SessionManager()
 
 
-# Database initialization on startup
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database on app startup."""
-    await init_db()
 
 
 # AI Generated Code by Deloitte + Cursor (BEGIN)

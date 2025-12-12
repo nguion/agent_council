@@ -178,7 +178,7 @@ class TestConcurrency:
         """Test that concurrent updates don't cause database locks."""
         from src.web.state_service import SessionStateService
         from src.web.db_service import UserService, SessionService
-        from datetime import datetime
+        from datetime import datetime, timezone
         
         # Create test session
         async with test_db() as db:
@@ -187,7 +187,7 @@ class TestConcurrency:
                 db, "test_session_123", user.id, "Test question"
             )
             await SessionStateService.init_state(
-                db, "test_session_123", user.id, "Test question", datetime.utcnow()
+                db, "test_session_123", user.id, "Test question", datetime.now(timezone.utc)
             )
             await db.commit()
         
