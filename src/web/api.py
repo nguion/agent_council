@@ -4,7 +4,7 @@ FastAPI Application for Agent Council Web Interface.
 
 import asyncio
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, BackgroundTasks, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .session_manager import SessionManager
 from .services import AgentCouncilService
-from .database import get_db, init_db, AsyncSessionLocal, User, Session as DBSession, IS_SQLITE
+from .database import get_db, init_db, AsyncSessionLocal, User, Session as DBSession
 from .db_service import UserService, SessionService
 from .state_service import SessionStateService, DatabaseBusyError
 from agent_council.utils.session_logger import SessionLogger
@@ -39,7 +39,6 @@ app.add_middleware(
 
 # Initialize session manager
 session_manager = SessionManager()
-USE_DB_STATE = not IS_SQLITE
 
 
 # Database initialization on startup
@@ -49,16 +48,87 @@ async def startup_event():
     await init_db()
 
 
+# AI Generated Code by Deloitte + Cursor (BEGIN)
+def _get_auth_mode() -> str:
+    mode = (os.getenv("AUTH_MODE") or "DEV").strip().upper()
+    return mode if mode in {"DEV", "PROD"} else "DEV"
+
+
+def _extract_external_id_from_bearer_token(token: str) -> str:
+    """
+    Decode and validate a Bearer token and extract a stable external user id.
+
+    Supported env vars:
+    - AUTH_JWT_SECRET: HS* shared secret (e.g., HS256)
+    - AUTH_JWT_PUBLIC_KEY: RS* public key (e.g., RS256)
+    - AUTH_JWT_ALG: algorithm override (default HS256 if secret else RS256)
+    - AUTH_JWT_AUDIENCE: optional audience enforcement
+    - AUTH_JWT_ISSUER: optional issuer enforcement
+    """
+    try:
+        from jose import JWTError, jwt  # type: ignore
+    except ImportError:
+        raise HTTPException(
+            status_code=500,
+            detail="Bearer token auth requires python-jose. Install backend web deps via requirements-web.txt",
+        )
+
+    jwt_secret = os.getenv("AUTH_JWT_SECRET")
+    jwt_public_key = os.getenv("AUTH_JWT_PUBLIC_KEY")
+    jwt_alg = (os.getenv("AUTH_JWT_ALG") or ("HS256" if jwt_secret else "RS256")).strip()
+    audience = os.getenv("AUTH_JWT_AUDIENCE")
+    issuer = os.getenv("AUTH_JWT_ISSUER")
+
+    key = jwt_secret or jwt_public_key
+    if not key:
+        raise HTTPException(
+            status_code=500,
+            detail="JWT auth misconfigured: set AUTH_JWT_SECRET or AUTH_JWT_PUBLIC_KEY",
+        )
+
+    options = {"verify_aud": bool(audience), "verify_iss": bool(issuer)}
+    try:
+        payload = jwt.decode(
+            token,
+            key,
+            algorithms=[jwt_alg],
+            audience=audience,
+            issuer=issuer,
+            options=options,
+        )
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid bearer token")
+
+    external_id = (
+        payload.get("email")
+        or payload.get("upn")
+        or payload.get("preferred_username")
+        or payload.get("sub")
+    )
+    if not external_id:
+        raise HTTPException(status_code=401, detail="Bearer token missing user identity claim")
+
+    return str(external_id)
+# AI Generated Code by Deloitte + Cursor (END)
+
+
 # User context helper
 async def get_current_user(
     db: AsyncSession = Depends(get_db),
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    x_authenticated_user: Optional[str] = Header(None, alias="X-Authenticated-User"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
 ) -> User:
     """
     Get or create the current user from request headers.
     
-    For development: Pass X-User-Id header (e.g., email).
-    For production: Integrate with SSO/OIDC and extract from token.
+    DEV mode:
+      - Accepts `X-User-Id` (email/UPN). If missing, defaults to `dev-user@localhost`.
+
+    PROD mode (AUTH_MODE=PROD):
+      - Requires either:
+        - `X-Authenticated-User` (trusted header injected by a reverse proxy / gateway), OR
+        - `Authorization: Bearer <JWT>` (validated via AUTH_JWT_* env vars)
     
     Args:
         db: Database session
@@ -67,15 +137,34 @@ async def get_current_user(
     Returns:
         User object
     """
-    # Default to a test user if no header provided (dev mode)
-    user_external_id = x_user_id or "dev-user@localhost"
-    
-    user = await UserService.get_or_create_user(
-        db,
-        external_id=user_external_id
-    )
-    
-    return user
+    # AI Generated Code by Deloitte + Cursor (BEGIN)
+    auth_mode = _get_auth_mode()
+
+    if auth_mode == "DEV":
+        user_external_id = x_user_id or "dev-user@localhost"
+        if not x_user_id:
+            print("Warning: AUTH_MODE=DEV and no X-User-Id provided; using dev-user@localhost")
+    else:
+        allow_x_user_id_in_prod = (os.getenv("AUTH_ALLOW_X_USER_ID_IN_PROD") or "false").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+
+        if x_authenticated_user:
+            user_external_id = x_authenticated_user
+        elif authorization and authorization.lower().startswith("bearer "):
+            token = authorization.split(" ", 1)[1].strip()
+            if not token:
+                raise HTTPException(status_code=401, detail="Missing bearer token")
+            user_external_id = _extract_external_id_from_bearer_token(token)
+        elif allow_x_user_id_in_prod and x_user_id:
+            user_external_id = x_user_id
+        else:
+            raise HTTPException(status_code=401, detail="Authentication required")
+
+    return await UserService.get_or_create_user(db, external_id=user_external_id)
+    # AI Generated Code by Deloitte + Cursor (END)
 
 
 # Pydantic models
@@ -131,39 +220,15 @@ async def authorize_session_access(
     return db_session
 
 
-async def get_state_with_fallback(
-    session_id: str,
-    db: Optional[AsyncSession] = None,
-    user_id: Optional[str] = None
-):
-    """
-    Prefer file-based state.json, fall back to DB if missing.
-    """
-    if USE_DB_STATE and db:
-        state = await SessionStateService.get_state(db, session_id, user_id) if user_id else await SessionStateService.get_state(db, session_id)
-        if state:
-            return state
-    # Legacy/file fallback
-    state = session_manager.get_state(session_id)
-    if state:
-        return state
-    # If we are on SQLite but DB has state, try it as a last resort
-    if not USE_DB_STATE and db:
-        state = await SessionStateService.get_state(db, session_id, user_id) if user_id else await SessionStateService.get_state(db, session_id)
-        if state:
-            return state
-    return None
-
-
 async def read_state_primary(
     session_id: str,
     db: AsyncSession,
     user_id: Optional[str] = None
 ):
-    """Read session state from primary store (DB if enabled, else file)."""
-    if USE_DB_STATE:
-        return await SessionStateService.get_state(db, session_id, user_id)
-    return session_manager.get_state(session_id)
+    # AI Generated Code by Deloitte + Cursor (BEGIN)
+    """Read session state from the database (single source of truth)."""
+    return await SessionStateService.get_state(db, session_id, user_id)
+    # AI Generated Code by Deloitte + Cursor (END)
 
 
 async def write_state_primary(
@@ -173,16 +238,15 @@ async def write_state_primary(
     user_id: Optional[str] = None,
     batched: bool = False
 ):
-    """Write session state to primary store with optional batching."""
-    if USE_DB_STATE:
-        if batched:
-            await SessionStateService.update_state_batched(session_id, updates, user_id)
-        else:
-            if db is None:
-                raise ValueError("DB session required for direct state update in DB mode")
-            await SessionStateService.update_state(db, session_id, updates, user_id)
-    else:
-        session_manager.update_state(session_id, updates)
+    # AI Generated Code by Deloitte + Cursor (BEGIN)
+    """Write session state to the database with optional batching."""
+    if batched:
+        await SessionStateService.update_state_batched(session_id, updates, user_id)
+        return
+    if db is None:
+        raise ValueError("DB session required for direct state update")
+    await SessionStateService.update_state(db, session_id, updates, user_id)
+    # AI Generated Code by Deloitte + Cursor (END)
 
 
 async def get_session_logger(session_id: str, db: AsyncSession, update_state: bool = True) -> SessionLogger:
@@ -264,7 +328,7 @@ async def create_session(
         session_manager.ensure_session_directories(session_id)
         
         # Create metadata in database
-        created_at = datetime.utcnow()
+        created_at = datetime.now(timezone.utc)
         await SessionService.create_session_metadata(
             db,
             session_id=session_id,
@@ -272,15 +336,16 @@ async def create_session(
             question=question
         )
         
-        # Initialize state (DB primary, file fallback)
-        if USE_DB_STATE:
-            await SessionStateService.init_state(
-                db,
-                session_id=session_id,
-                user_id=current_user.id,
-                question=question,
-                created_at=created_at
-            )
+        # AI Generated Code by Deloitte + Cursor (BEGIN)
+        # Initialize state in DB (single source of truth)
+        await SessionStateService.init_state(
+            db,
+            session_id=session_id,
+            user_id=current_user.id,
+            question=question,
+            created_at=created_at
+        )
+        # AI Generated Code by Deloitte + Cursor (END)
 
         # Save uploaded files
         file_paths = []
@@ -361,7 +426,7 @@ async def build_council(
         # Authorize access
         await authorize_session_access(session_id, current_user.id, db)
         
-        state = await get_state_with_fallback(session_id, db, current_user.id)
+        state = await read_state_primary(session_id, db, current_user.id)
         
         if not state:
             raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
@@ -473,7 +538,7 @@ async def update_council(
         await write_state_primary(
             session_id,
             {
-                "council_config": council_config.dict(),
+                "council_config": council_config.model_dump(),
                 "execution_results": None,
                 "execution_status": {},
                 "execution_error": None,
@@ -510,7 +575,7 @@ async def update_council(
 async def execute_council_task(session_id: str):
     """
     Background task to execute the council.
-    Uses DB state (JSONB) with batched progress updates; falls back to file for SQLite.
+    Uses DB state with batched progress updates.
     """
     print(f"[EXECUTE_TASK] Starting execution for {session_id}")
     try:
@@ -532,21 +597,17 @@ async def execute_council_task(session_id: str):
             logger = SessionLogger(output_dir=str(logs_dir))
             print(f"[EXECUTE_TASK] Logger created for {session_id}")
             
-            # Progress callback -> batched DB updates or file fallback
-            if USE_DB_STATE:
-                def progress_cb(agent_name: str, status: str):
-                    asyncio.create_task(
-                        SessionStateService.update_state_batched(
-                            session_id,
-                            {"execution_status": {agent_name: status}},
-                            user_id=None
-                        )
+            # AI Generated Code by Deloitte + Cursor (BEGIN)
+            # Progress callback -> batched DB updates (DB-only state)
+            def progress_cb(agent_name: str, status: str):
+                asyncio.create_task(
+                    SessionStateService.update_state_batched(
+                        session_id,
+                        {"execution_status": {agent_name: status}},
+                        user_id=None
                     )
-            else:
-                def progress_cb(agent_name: str, status: str):
-                    session_manager.update_state(session_id, {
-                        "execution_status": {agent_name: status}
-                    })
+                )
+            # AI Generated Code by Deloitte + Cursor (END)
             
             print(f"[EXECUTE_TASK] About to execute council for {session_id}")
             
@@ -629,7 +690,7 @@ async def execute_council(
             # Authorize access
             await authorize_session_access(session_id, current_user.id, db)
             
-            state = await get_state_with_fallback(session_id, db, current_user.id)
+            state = await read_state_primary(session_id, db, current_user.id)
             
             if not state:
                 raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
@@ -722,7 +783,7 @@ async def get_status(
         # Authorize access
         await authorize_session_access(session_id, current_user.id, db)
         
-        state = await get_state_with_fallback(session_id, db, current_user.id)
+        state = await read_state_primary(session_id, db, current_user.id)
         
         if not state:
             raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
@@ -771,7 +832,7 @@ async def get_results(
         # Authorize access
         await authorize_session_access(session_id, current_user.id, db)
         
-        state = await get_state_with_fallback(session_id, db, current_user.id)
+        state = await read_state_primary(session_id, db, current_user.id)
         
         if not state:
             raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
@@ -791,7 +852,7 @@ async def get_results(
 async def peer_review_task(session_id: str):
     """
     Background task to run peer review.
-    Uses DB state with batched progress updates; falls back to file for SQLite.
+    Uses DB state with batched progress updates.
     """
     print(f"[REVIEW_TASK] Starting peer review for {session_id}")
     try:
@@ -810,21 +871,17 @@ async def peer_review_task(session_id: str):
             logs_dir.mkdir(parents=True, exist_ok=True)
             logger = SessionLogger(output_dir=str(logs_dir))
             
-            # Progress callback -> batched DB updates or file fallback
-            if USE_DB_STATE:
-                def progress_cb(agent_name: str, status: str):
-                    asyncio.create_task(
-                        SessionStateService.update_state_batched(
-                            session_id,
-                            {"review_status": {agent_name: status}},
-                            user_id=None
-                        )
+            # AI Generated Code by Deloitte + Cursor (BEGIN)
+            # Progress callback -> batched DB updates (DB-only state)
+            def progress_cb(agent_name: str, status: str):
+                asyncio.create_task(
+                    SessionStateService.update_state_batched(
+                        session_id,
+                        {"review_status": {agent_name: status}},
+                        user_id=None
                     )
-            else:
-                def progress_cb(agent_name: str, status: str):
-                    session_manager.update_state(session_id, {
-                        "review_status": {agent_name: status}
-                    })
+                )
+            # AI Generated Code by Deloitte + Cursor (END)
             
             peer_reviews = await AgentCouncilService.run_peer_review(
                 council_config,
@@ -908,7 +965,7 @@ async def peer_review(
             # Authorize access
             await authorize_session_access(session_id, current_user.id, db)
             
-            state = await get_state_with_fallback(session_id, db, current_user.id)
+            state = await read_state_primary(session_id, db, current_user.id)
             
             if not state:
                 raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
@@ -995,7 +1052,7 @@ async def get_reviews(
         # Authorize access
         await authorize_session_access(session_id, current_user.id, db)
         
-        state = await get_state_with_fallback(session_id, db, current_user.id)
+        state = await read_state_primary(session_id, db, current_user.id)
         
         if not state:
             raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
@@ -1038,7 +1095,7 @@ async def synthesize(
         # Authorize access
         await authorize_session_access(session_id, current_user.id, db)
         
-        state = await get_state_with_fallback(session_id, db, current_user.id)
+        state = await read_state_primary(session_id, db, current_user.id)
         
         if not state:
             raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
@@ -1136,7 +1193,7 @@ async def get_summary(
         # Authorize access
         await authorize_session_access(session_id, current_user.id, db)
         
-        state = await get_state_with_fallback(session_id, db, current_user.id)
+        state = await read_state_primary(session_id, db, current_user.id)
         
         if not state:
             raise HTTPException(status_code=404, detail=f"Session {session_id} not found")

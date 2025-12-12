@@ -10,16 +10,19 @@ Usage:
 
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 from datetime import datetime
 
-# Add project root to path for imports
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# AI Generated Code by Deloitte + Cursor (BEGIN)
+# Add project root to path for imports (so `src.*` namespace imports work)
+PROJECT_ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(PROJECT_ROOT))
+# AI Generated Code by Deloitte + Cursor (END)
 
-from src.web.database import init_db, AsyncSessionLocal, SessionState
+from src.web.database import init_db, AsyncSessionLocal, User, Session as DBSession, SessionState
 from src.web.db_service import UserService, SessionService
-from src.web.state_service import SessionStateService
 
 
 async def migrate_sessions():
@@ -70,117 +73,84 @@ async def migrate_sessions():
                 # Load state from file
                 with open(state_file, 'r', encoding='utf-8') as f:
                     state = json.load(f)
-                
-                # Check if session exists in DB
-                from sqlalchemy import select
-                from src.web.database import Session as DBSession
-                result = await db.execute(
-                    select(DBSession).where(DBSession.id == session_id)
-                )
-                db_session = result.scalar_one_or_none()
-                
-                if db_session:
-                    # Check if already migrated into SessionState
-                    existing_state_row = await db.get(SessionState, session_id)
-                    if existing_state_row:
-                        print(f"⊘ {session_id}: Already migrated (SessionState), skipping")
-                        skipped_count += 1
-                        continue
-                    
-                    # Update existing session metadata and state columns
-                    db_session.state = state
-                    
-                    if "question" in state and not db_session.question:
-                        db_session.question = state["question"]
-                    if "current_step" in state:
-                        db_session.current_step = state.get("current_step", "complete")
-                    
-                    # Derive status from state
-                    if state.get("chairman_verdict"):
-                        db_session.status = "verdict_complete"
-                    elif state.get("peer_reviews"):
-                        db_session.status = "review_complete"
-                    elif state.get("execution_results"):
-                        db_session.status = "execution_complete"
-                    else:
-                        db_session.status = state.get("status", "idle")
-                    
-                    tokens = state.get("tokens", {})
-                    if "total_cost_usd" in tokens:
-                        db_session.last_cost_usd = tokens["total_cost_usd"]
-                    if "total_tokens" in tokens:
-                        db_session.last_total_tokens = tokens["total_tokens"]
-                    
-                    db_session.updated_at = datetime.utcnow()
 
-                    # Create SessionState row
-                    db.add(SessionState(session_id=session_id, state=state, updated_at=datetime.utcnow()))
-                    
-                    print(f"✓ {session_id}: Migrated (existing DB entry)")
-                    migrated_count += 1
-                
-                else:
-                    # Session doesn't exist in DB - need to create it
-                    user_id = state.get("user_id")
-                    
-                    if not user_id:
-                        # Create a default admin user for orphaned sessions
-                        admin_user = await UserService.get_or_create_user(
-                            db,
-                            "admin@deloitte.com",
-                            "Admin"
-                        )
-                        user_id = admin_user.id
-                        print(f"  ⚠ No user_id in state, assigning to admin@deloitte.com")
+                # AI Generated Code by Deloitte + Cursor (BEGIN)
+                # Skip if already migrated (SessionState exists)
+                existing_state = await db.get(SessionState, session_id)
+                if existing_state:
+                    print(f"⊘ {session_id}: Already migrated (SessionState), skipping")
+                    skipped_count += 1
+                    continue
+
+                # Resolve/assign user ownership
+                state_user_value = state.get("user_id")
+                resolved_user_id = None
+
+                if isinstance(state_user_value, str) and state_user_value.strip():
+                    # If it matches an existing internal user id, keep it
+                    existing_user = await db.get(User, state_user_value)
+                    if existing_user:
+                        resolved_user_id = existing_user.id
+                    # If it looks like an email/UPN, create/find user by external_id
+                    elif "@" in state_user_value:
+                        user = await UserService.get_or_create_user(db, external_id=state_user_value)
+                        resolved_user_id = user.id
+
+                if not resolved_user_id:
+                    admin_external_id = os.getenv("MIGRATION_ADMIN_EXTERNAL_ID", "admin@deloitte.com")
+                    admin_user = await UserService.get_or_create_user(db, external_id=admin_external_id, display_name="Admin")
+                    resolved_user_id = admin_user.id
+                    if not state_user_value:
+                        print(f"  ⚠ No user_id in state, assigning to {admin_external_id}")
                     else:
-                        # Ensure user exists
-                        user = await UserService.get_or_create_user(
-                            db,
-                            user_id,
-                            user_id.split('@')[0] if '@' in user_id else user_id
-                        )
-                        user_id = user.id
-                    
-                    # Create session metadata
+                        print(f"  ⚠ Could not resolve user_id={state_user_value!r}, assigning to {admin_external_id}")
+
+                # Ensure session metadata exists
+                db_session = await db.get(DBSession, session_id)
+                if not db_session:
                     question = state.get("question", "Migrated session")
-                    created_at_str = state.get("created_at")
-                    created_at = datetime.fromisoformat(created_at_str) if created_at_str else datetime.utcnow()
-                    
-                    # Derive status
-                    if state.get("chairman_verdict"):
-                        status = "verdict_complete"
-                    elif state.get("peer_reviews"):
-                        status = "review_complete"
-                    elif state.get("execution_results"):
-                        status = "execution_complete"
-                    else:
-                        status = state.get("status", "idle")
-                    
-                    from src.web.database import Session as DBSession
-                    new_session = DBSession(
-                        id=session_id,
-                        user_id=user_id,
+                    await SessionService.create_session_metadata(
+                        db,
+                        session_id=session_id,
+                        user_id=resolved_user_id,
                         question=question,
-                        current_step=state.get("current_step", "complete"),
-                        status=status,
-                        created_at=created_at,
-                        updated_at=datetime.utcnow(),
-                        is_deleted=False,
-                        state=state
                     )
-                    
-                    # Set cost/token info
-                    tokens = state.get("tokens", {})
-                    if "total_cost_usd" in tokens:
-                        new_session.last_cost_usd = tokens["total_cost_usd"]
-                    if "total_tokens" in tokens:
-                        new_session.last_total_tokens = tokens["total_tokens"]
-                    
-                    db.add(new_session)
-                    db.add(SessionState(session_id=session_id, state=state, updated_at=datetime.utcnow()))
-                    
-                    print(f"✓ {session_id}: Migrated (created new DB entry)")
-                    migrated_count += 1
+
+                # Normalize state for DB storage
+                state["session_id"] = session_id
+                state["user_id"] = resolved_user_id
+                if not state.get("created_at"):
+                    state["created_at"] = datetime.utcnow().isoformat()
+                state["updated_at"] = datetime.utcnow().isoformat()
+
+                # Persist DB state
+                db.add(SessionState(session_id=session_id, state=state, updated_at=datetime.utcnow()))
+
+                # Sync metadata from state
+                if state.get("chairman_verdict"):
+                    derived_status = "verdict_complete"
+                elif state.get("peer_reviews"):
+                    derived_status = "review_complete"
+                elif state.get("execution_results"):
+                    derived_status = "execution_complete"
+                else:
+                    derived_status = state.get("status", "idle")
+
+                tokens = state.get("tokens", {}) if isinstance(state.get("tokens"), dict) else {}
+                meta_updates = {
+                    "current_step": state.get("current_step", "complete"),
+                    "status": derived_status,
+                }
+                if "total_cost_usd" in tokens:
+                    meta_updates["last_cost_usd"] = tokens.get("total_cost_usd")
+                if "total_tokens" in tokens:
+                    meta_updates["last_total_tokens"] = tokens.get("total_tokens")
+
+                await SessionService.update_session_metadata(db, session_id, meta_updates)
+
+                print(f"✓ {session_id}: Migrated (SessionState)")
+                migrated_count += 1
+                # AI Generated Code by Deloitte + Cursor (END)
                 
             except Exception as e:
                 print(f"✗ {session_id}: Error - {e}")
@@ -220,3 +190,4 @@ async def migrate_sessions():
 
 if __name__ == "__main__":
     asyncio.run(migrate_sessions())
+

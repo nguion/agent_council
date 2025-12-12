@@ -45,8 +45,7 @@ export const Step1Input = () => {
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
   
-  const getFileIcon = (filename) => {
-    const ext = filename.split('.').pop().toLowerCase();
+  const getFileIcon = (_filename) => {
     return <FileText className="h-5 w-5 text-gray-400" />;
   };
   

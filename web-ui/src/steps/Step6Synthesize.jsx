@@ -177,22 +177,22 @@ export const Step6Synthesize = () => {
           <div className="prose prose-base max-w-none text-gray-900 max-h-[70vh] overflow-y-auto pr-2">
             <ReactMarkdown
               components={{
-                h1: ({ node, ...props }) => <h1 className="text-2xl font-bold mb-4 mt-6 text-gray-900 border-b border-primary-200 pb-2" {...props} />,
-                h2: ({ node, ...props }) => <h2 className="text-xl font-semibold mb-3 mt-5 text-gray-800" {...props} />,
-                h3: ({ node, ...props }) => <h3 className="text-lg font-semibold mb-2 mt-4 text-gray-800" {...props} />,
-                p: ({ node, ...props }) => <p className="mb-3 leading-relaxed text-gray-700" {...props} />,
-                ul: ({ node, ...props }) => <ul className="mb-3 ml-5 space-y-1 list-disc [&_ul]:mt-1 [&_ul]:mb-1 [&_ul]:ml-5 [&_ul]:list-circle [&_ul_ul]:list-square" {...props} />,
-                ol: ({ node, ...props }) => <ol className="mb-3 ml-5 space-y-1 list-decimal [&_ol]:mt-1 [&_ol]:mb-1 [&_ol]:ml-5 [&_ol]:list-[lower-alpha] [&_ol_ol]:list-[lower-roman]" {...props} />,
-                li: ({ node, ...props }) => <li className="leading-relaxed text-gray-700 [&>ul]:mt-1 [&>ol]:mt-1" {...props} />,
-                strong: ({ node, ...props }) => <strong className="font-semibold text-gray-900" {...props} />,
-                em: ({ node, ...props }) => <em className="italic text-gray-800" {...props} />,
-                blockquote: ({ node, ...props }) => <blockquote className="border-l-4 border-primary-300 pl-4 py-2 my-3 italic text-gray-600 bg-gray-50 rounded-r" {...props} />,
-                code: ({ node, inline, ...props }) =>
+                h1: ({ node: _node, ...props }) => <h1 className="text-2xl font-bold mb-4 mt-6 text-gray-900 border-b border-primary-200 pb-2" {...props} />,
+                h2: ({ node: _node, ...props }) => <h2 className="text-xl font-semibold mb-3 mt-5 text-gray-800" {...props} />,
+                h3: ({ node: _node, ...props }) => <h3 className="text-lg font-semibold mb-2 mt-4 text-gray-800" {...props} />,
+                p: ({ node: _node, ...props }) => <p className="mb-3 leading-relaxed text-gray-700" {...props} />,
+                ul: ({ node: _node, ...props }) => <ul className="mb-3 ml-5 space-y-1 list-disc [&_ul]:mt-1 [&_ul]:mb-1 [&_ul]:ml-5 [&_ul]:list-circle [&_ul_ul]:list-square" {...props} />,
+                ol: ({ node: _node, ...props }) => <ol className="mb-3 ml-5 space-y-1 list-decimal [&_ol]:mt-1 [&_ol]:mb-1 [&_ol]:ml-5 [&_ol]:list-[lower-alpha] [&_ol_ol]:list-[lower-roman]" {...props} />,
+                li: ({ node: _node, ...props }) => <li className="leading-relaxed text-gray-700 [&>ul]:mt-1 [&>ol]:mt-1" {...props} />,
+                strong: ({ node: _node, ...props }) => <strong className="font-semibold text-gray-900" {...props} />,
+                em: ({ node: _node, ...props }) => <em className="italic text-gray-800" {...props} />,
+                blockquote: ({ node: _node, ...props }) => <blockquote className="border-l-4 border-primary-300 pl-4 py-2 my-3 italic text-gray-600 bg-gray-50 rounded-r" {...props} />,
+                code: ({ node: _node, inline, ...props }) =>
                   inline
                     ? <code className="px-1.5 py-0.5 bg-gray-100 text-primary-700 rounded text-sm font-mono" {...props} />
                     : <code className="block p-3 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm font-mono my-3" {...props} />,
-                pre: ({ node, ...props }) => <pre className="my-3" {...props} />,
-                hr: ({ node, ...props }) => <hr className="my-4 border-gray-200" {...props} />,
+                pre: ({ node: _node, ...props }) => <pre className="my-3" {...props} />,
+                hr: ({ node: _node, ...props }) => <hr className="my-4 border-gray-200" {...props} />,
               }}
             >
               {verdict}

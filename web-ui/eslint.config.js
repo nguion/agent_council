@@ -23,7 +23,37 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      // AI Generated Code by Deloitte + Cursor (BEGIN)
+      'no-unused-vars': [
+        'error',
+        {
+          varsIgnorePattern: '^[A-Z_]',
+          argsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+      // This rule is too strict for common patterns like initializing component state from
+      // server-provided data in effects. Keep hooks best-practices via exhaustive-deps instead.
+      'react-hooks/set-state-in-effect': 'off',
+      // AI Generated Code by Deloitte + Cursor (END)
     },
   },
+  // AI Generated Code by Deloitte + Cursor (BEGIN)
+  // Node/CommonJS globals for config + e2e test files.
+  {
+    files: [
+      'playwright.config.js',
+      'tests/**/*.js',
+      '**/*.config.js',
+      '**/*.config.cjs',
+      '**/*.config.mjs',
+    ],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        ...globals.commonjs,
+      },
+    },
+  },
+  // AI Generated Code by Deloitte + Cursor (END)
 ])

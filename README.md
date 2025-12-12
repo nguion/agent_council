@@ -32,10 +32,10 @@ A modular, agentic framework for creating, customizing, and executing councils o
 
 ```bash
 # Terminal 1 - Start Backend
-./start_backend.sh
+python run_api.py
 
-# Terminal 2 - Start Frontend
-./start_frontend.sh
+# Terminal 2 - Start Frontend (in separate terminal)
+cd web-ui && npm run dev
 ```
 
 Open browser: **http://localhost:5173**
@@ -43,7 +43,7 @@ Open browser: **http://localhost:5173**
 ### Option 2: CLI Interface
 
 ```bash
-python3 agentcouncil.py
+python3 agentcouncil.py cli
 ```
 
 ---
@@ -56,7 +56,7 @@ python3 agentcouncil.py
 - Node.js 16+ and npm (for web interface)
 - OpenAI API key
 
-### Quick Setup (CLI Only)
+### Quick Setup
 
 **Windows (PowerShell):**
 ```powershell
@@ -95,7 +95,7 @@ npm install
 cd ..
 
 # 6. Verify setup
-python3 test_setup.py
+python3 scripts/verify_setup.py
 ```
 
 ---
@@ -123,71 +123,15 @@ The web interface provides a guided 5-step workflow with session persistence and
 
 #### Session Management
 
-The application features a **three-panel layout** for efficient session management:
-
-```
-┌─────────────────┬──────────────────────────┬─────────────────┐
-│ Your Sessions   │   Main Workflow          │ Session Details │
-│ (Left Panel)    │   (Steps 1-5)            │ (Right Panel)   │
-├─────────────────┼──────────────────────────┼─────────────────┤
-│ My Sessions [+] │                          │ Question: ...   │
-│ 3 sessions      │  [Current step view]     │ Council: ...    │
-│                 │                          │ Cost: $0.234    │
-│ ✓ Complete 2h   │                          │ Tokens: 20.8K   │
-│ Strategy for... │                          │                 │
-│ [trash]         │                          │                 │
-└─────────────────┴──────────────────────────┴─────────────────┘
-```
-
-**Left Sidebar (Your Sessions):**
-- All your sessions in one place
-- Quick navigation - click any session to resume
-- Delete sessions - hover and click trash icon
-- See status at a glance (color-coded badges)
-- Track costs per session
-- Auto-refreshes every 10 seconds
-
-**Features:**
-- **View all sessions**: Check the left sidebar or navigate to /sessions
-- **Resume sessions**: Click any session in the sidebar to continue where you left off
-- **Delete sessions**: Hover over a session and click the trash icon (soft delete - files preserved)
-- **Create sessions**: Click the [+] button in sidebar header
-- **Navigate safely**: Use browser back/forward buttons - sessions auto-save
-- **Refresh anytime**: All progress is persisted on the backend
-- **Privacy**: You see only your own sessions - cannot access others' data
-
-#### Example Questions
-
-✅ **Good**: "What are 5 data-driven strategies to reduce customer churn for B2B SaaS companies with 50-200 employees?"
-
-❌ **Too vague**: "How to get more customers?"
-
-#### Best Practices
-
-**Council Size:**
-- **Small (2-3 agents)**: Quick, focused problems
-- **Medium (4-6 agents)**: Complex problems, multiple perspectives  
-- **Large (7+ agents)**: Very complex, strategic decisions
-
-**Reasoning Effort:**
-- **Low**: Simple analysis (~10s per agent)
-- **Medium**: Balanced analysis (~30s per agent)
-- **High**: Deep strategic thinking (~60s+ per agent)
-
-**Web Search:**
-- Enable for: current events, statistics, research
-- Disable for: internal company data, hypothetical scenarios
-
-**File Uploads:**
-- Use PDFs for reports, whitepapers
-- Use CSVs for data, tables
-- Use TXT/MD for notes, documentation
-- Keep files under 10MB each
+The application features a **three-panel layout** for efficient session management.
+- **Left Sidebar (Your Sessions):** All your sessions in one place, auto-refreshed.
+- **Main Workflow:** The current step (1-5).
+- **Right Panel:** Session details and real-time cost tracking.
 
 ### CLI Interface
 
 ```bash
-python3 agentcouncil.py
+python3 agentcouncil.py cli
 ```
 
 **5-Step Flow:**
@@ -206,33 +150,18 @@ Agent_Council/
 ├── src/
 │   ├── agent_council/          # Core logic
 │   │   ├── core/
-│   │   │   ├── agent_builder.py
-│   │   │   ├── agent_config.py
-│   │   │   ├── agent_runner.py
-│   │   │   ├── council_builder.py
-│   │   │   ├── council_editor.py
-│   │   │   ├── council_runner.py
-│   │   │   ├── council_reviewer.py
-│   │   │   └── council_chairman.py
 │   │   └── utils/
-│   │       ├── file_ingestion.py
-│   │       ├── session_logger.py
-│   │       └── context_condense.py
 │   └── web/                    # Web API (FastAPI)
-│       ├── api.py
-│       ├── services.py
-│       └── session_manager.py
 ├── web-ui/                     # Frontend (React + Vite)
-│   └── src/
-│       ├── components/
-│       ├── steps/
-│       ├── api.js
-│       └── App.jsx
+├── scripts/                    # Utility scripts
+│   ├── verify_setup.py         # Setup verification
+│   ├── verify_multi_user.py    # Multi-user isolation tests
+│   └── migrate_state_json_to_db.py # DB migration tool
+├── tests/                      # Backend tests
 ├── agentcouncil.py             # CLI entrypoint
 ├── run_api.py                  # Web API server
-├── start_backend.sh            # Backend startup script
-├── start_frontend.sh           # Frontend startup script
-└── test_setup.py               # Setup verification
+├── setup.sh / setup.ps1        # Setup scripts
+└── AGENTS.md                   # Detailed agent documentation
 ```
 
 ---
@@ -259,7 +188,6 @@ agent = AgentBuilder.create(config)
 
 ### CLI Outputs
 - `logs/*.md`: Full transcripts with token usage and cost per call
-- `council_session_complete.json`: Complete results, peer reviews, verdict, and cost breakdown
 
 ### Web Interface Outputs
 - `sessions/{session_id}/`: Session data directory
@@ -272,7 +200,6 @@ agent = AgentBuilder.create(config)
 - Real-time token usage (input/output)
 - Automatic cost calculation (GPT-5.1, GPT-4o, etc.)
 - Detailed breakdown per agent and total session cost
-- Displayed in CLI tables and web sidebar
 
 ---
 
@@ -344,7 +271,7 @@ lsof -ti:5173 | xargs kill -9
 
 **Verify setup:**
 ```bash
-python3 test_setup.py
+python3 scripts/verify_setup.py
 ```
 
 **Check API connection:**
@@ -365,9 +292,6 @@ http://localhost:8000/docs
 # Using gunicorn (recommended)
 pip install gunicorn
 gunicorn src.web.api:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
-
-# Or using uvicorn directly
-uvicorn src.web.api:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
 ### Frontend
@@ -437,7 +361,7 @@ See interactive docs: http://localhost:8000/docs
 
 ## Getting Help
 
-1. Run `python3 test_setup.py` to verify setup
+1. Run `python3 scripts/verify_setup.py` to verify setup
 2. Check terminal outputs for error messages
 3. Review API docs at http://localhost:8000/docs
 4. Ensure API key is valid and has credits

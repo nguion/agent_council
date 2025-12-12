@@ -62,11 +62,22 @@ async def test_db():
 
 
 @pytest.fixture
-def client(test_db):
+def client(test_db, monkeypatch):
     """Create a test client with dependency override."""
+    # AI Generated Code by Deloitte + Cursor (BEGIN)
     async def override_get_db():
         async with test_db() as session:
-            yield session
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    # Patch endpoints that use AsyncSessionLocal directly so they use the temp DB too.
+    import src.web.api as api_module
+    monkeypatch.setattr(api_module, "AsyncSessionLocal", test_db)
+    # AI Generated Code by Deloitte + Cursor (END)
     
     app.dependency_overrides[get_db] = override_get_db
     

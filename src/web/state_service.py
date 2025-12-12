@@ -10,9 +10,8 @@ from typing import Optional, Dict, Any
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import OperationalError
-from pathlib import Path
 
-from .database import Session as DBSession, SessionState, AsyncSessionLocal, IS_SQLITE
+from .database import Session as DBSession, SessionState, AsyncSessionLocal
 
 
 class DatabaseBusyError(Exception):
@@ -67,6 +66,7 @@ class SessionStateService:
         ) from last_error
     
     @staticmethod
+    # AI Generated Code by Deloitte + Cursor (BEGIN)
     async def get_state(
         db: AsyncSession,
         session_id: str,
@@ -83,61 +83,13 @@ class SessionStateService:
         Returns:
             Session state dict, or None if not found
         """
-        # Prefer dedicated SessionState table
+        # DB-only: SessionState is the single source of truth.
+        # Migration from legacy state.json is handled explicitly via scripts (not at runtime).
         state_row = await db.get(SessionState, session_id)
-        if state_row:
-            return state_row.state
-
-        # Fallback to Session.state column (legacy)
-        query = select(DBSession.state).where(DBSession.id == session_id)
-        if user_id:
-            query = query.where(DBSession.user_id == user_id)
-        result = await db.execute(query)
-        legacy_state = result.scalar_one_or_none()
-        if legacy_state:
-            # Lazily backfill SessionState
-            try:
-                await SessionStateService._persist_state(db, session_id, legacy_state)
-                await db.flush()
-            except Exception as e:
-                print(f"Warning: could not backfill SessionState for {session_id}: {e}")
-            return legacy_state
-
-        # Fallback to file-based legacy state (migration path)
-        legacy_state = await SessionStateService._try_load_legacy_state(session_id)
-        if legacy_state:
-            try:
-                await SessionStateService._persist_state(db, session_id, legacy_state)
-                await db.flush()
-            except Exception as e:
-                print(f"Warning: could not import legacy file state for {session_id}: {e}")
-            return legacy_state
-
-        return None
-    
-    @staticmethod
-    async def _try_load_legacy_state(session_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Attempt to load state from legacy state.json file.
-        Used during migration period.
-        
-        Args:
-            session_id: Session identifier
-            
-        Returns:
-            State dict from file, or None if file doesn't exist
-        """
-        state_file = Path("sessions") / session_id / "state.json"
-        if not state_file.exists():
+        if not state_row:
             return None
-        
-        try:
-            import json
-            with open(state_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"Warning: Could not load legacy state.json for {session_id}: {e}")
-            return None
+        return state_row.state
+    # AI Generated Code by Deloitte + Cursor (END)
     
     @staticmethod
     async def init_state(
@@ -333,8 +285,9 @@ class SessionStateService:
     # -------- Internal helpers --------
 
     @staticmethod
+    # AI Generated Code by Deloitte + Cursor (BEGIN)
     async def _persist_state(db: AsyncSession, session_id: str, state: Dict[str, Any]):
-        """Upsert into SessionState (and keep Session.state for compatibility)."""
+        """Upsert into SessionState (DB-only)."""
         state_row = await db.get(SessionState, session_id)
         if not state_row:
             state_row = SessionState(session_id=session_id, state=state, updated_at=datetime.utcnow())
@@ -342,18 +295,7 @@ class SessionStateService:
         else:
             state_row.state = state
             state_row.updated_at = datetime.utcnow()
-
-        # Keep legacy Session.state in sync for backwards compatibility and optional SQLite fallback
-        session_values = {"updated_at": datetime.utcnow()}
-        # Only attempt to write the legacy state column if it exists (e.g., SQLite fallback)
-        if hasattr(DBSession, "state"):
-            session_values["state"] = state
-
-        await db.execute(
-            update(DBSession)
-            .where(DBSession.id == session_id)
-            .values(**session_values)
-        )
+    # AI Generated Code by Deloitte + Cursor (END)
 
     @staticmethod
     async def _sync_session_metadata(

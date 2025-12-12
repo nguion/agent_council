@@ -4,7 +4,7 @@ Database service for user and session metadata operations.
 
 import uuid
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,8 +46,8 @@ class UserService:
             id=str(uuid.uuid4()),
             external_id=external_id,
             display_name=display_name or external_id.split('@')[0],
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc)
         )
         db.add(user)
         try:
@@ -94,8 +94,8 @@ class SessionService:
             question=question,
             current_step="build",
             status="idle",
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
             is_deleted=False
         )
         db.add(session)
@@ -169,7 +169,7 @@ class SessionService:
             session_id: Session identifier
             updates: Dictionary of fields to update
         """
-        updates["updated_at"] = datetime.utcnow()
+        updates["updated_at"] = datetime.now(timezone.utc)
         
         await db.execute(
             update(Session)

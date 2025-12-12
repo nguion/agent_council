@@ -27,7 +27,7 @@ export const HomeLayout = () => {
       const value = localStorage.getItem(key);
       if (value === null) return fallback;
       return value === 'true';
-    } catch (err) {
+    } catch (_err) {
       return fallback;
     }
   };
@@ -35,7 +35,7 @@ export const HomeLayout = () => {
   const persistVisibility = (key, value) => {
     try {
       localStorage.setItem(key, String(value));
-    } catch (err) {
+    } catch (_err) {
       // ignore
     }
   };
@@ -47,7 +47,7 @@ export const HomeLayout = () => {
       const parsed = parseInt(value, 10);
       if (Number.isNaN(parsed)) return fallback;
       return Math.min(Math.max(parsed, min), max);
-    } catch (err) {
+    } catch (_err) {
       return fallback;
     }
   };
@@ -55,7 +55,7 @@ export const HomeLayout = () => {
   const persistWidth = (key, value) => {
     try {
       localStorage.setItem(key, String(value));
-    } catch (err) {
+    } catch (_err) {
       // ignore
     }
   };
@@ -85,7 +85,7 @@ export const HomeLayout = () => {
     try {
       document.body.style.userSelect = active ? 'none' : '';
       document.body.style.cursor = active ? 'col-resize' : '';
-    } catch (err) {
+    } catch (_err) {
       // ignore
     }
   };
