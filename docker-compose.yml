@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # Database
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: agent_council
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d agent_council"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://user:password@db:5432/agent_council
+      - AUTH_MODE=${AUTH_MODE:-DEV}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # Add other env vars here
+    volumes:
+      # Persist uploads and logs
+      - ./sessions:/app/sessions
+      # Optional: mount source for code reloading (if using uvicorn --reload)
+      # - ./src:/app/src
+
+  # Frontend
+  # Note: This runs the production build served by Nginx.
+  # For local dev with hot-reloading, run `npm run dev` on host instead.
+  frontend:
+    build:
+      context: ./web-ui
+      dockerfile: Dockerfile
+      # Build args to bake in API URL (browser needs to reach backend)
+      # In Docker Desktop, localhost refers to the host machine.
+      args:
+        - VITE_API_URL=http://localhost:8000
+    restart: always
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+

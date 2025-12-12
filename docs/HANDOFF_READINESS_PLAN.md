@@ -24,6 +24,7 @@
   - `docs/ARCHITECTURE.md` rewritten to match current DB-first `session_state` + local filesystem artifacts (part of PR-1)
   - Added v1 docs for Data Handling, Security Model, Privacy, and Runbook (part of PR-1)
   - Fixed `scripts/verify_setup.py` and added `.env.example` files (part of PR-2)
+  - Added containerization support (`Dockerfile`, `docker-compose.yml`) (part of PR-3)
 - **Open decisions**:
   - Hosting platform — Owner: SRE/Platform — Due: Handoff
   - Queue/worker system — Owner: Backend + SRE — Due: Sprint 3
@@ -524,10 +525,27 @@ This section is the “ready to execute” slice: each PR is scoped to be review
    - **Progress notes**:
      - 2025-12-12: Started PR-2.
      - 2025-12-12: Fixed `verify_setup.py`, created `.env.example` and `web-ui/.env.example`. Verified script passes.
- 3. **PR-3 Containerized local dev**
+3. **PR-3 Containerized local dev** — **Done**
    - Add backend `Dockerfile`, frontend `web-ui/Dockerfile` (or document why not).
    - Add minimal `docker-compose.yml` (Postgres + backend + frontend). Keep optional.
-4. **PR-4 CI baseline**
+   - **Execution plan (this session)**:
+     - **Steps**:
+       - Create `Dockerfile` for the Python backend (multi-stage build recommended for smaller image).
+       - Create `web-ui/Dockerfile` for the React frontend (build stage + nginx serve).
+       - Create `docker-compose.yml` orchestrating Postgres, Backend, and Frontend.
+       - Verify: `docker-compose config` and test build.
+     - **Files to touch**:
+       - `Dockerfile` (new)
+       - `web-ui/Dockerfile` (new)
+       - `docker-compose.yml` (new)
+       - `.dockerignore` (new)
+     - **Acceptance criteria**:
+       - `docker-compose up --build` brings up the full stack (DB, API, UI).
+       - Backend connects to the containerized Postgres DB automatically.
+   - **Progress notes**:
+     - 2025-12-12: Started PR-3.
+     - 2025-12-12: Added `Dockerfile`, `web-ui/Dockerfile`, `docker-compose.yml`, `.dockerignore`. Validated with `docker-compose config`.
+ 4. **PR-4 CI baseline**
    - GitHub Actions: ruff + pytest + frontend build (and eslint if desired).
    - Optional: Playwright e2e as nightly.
 5. **PR-5 Alembic baseline**
