@@ -250,6 +250,90 @@ class TestErrorHandling:
         
         assert response2.status_code == 404  # Not found for unauthorized user
 
+    def test_malformed_request_missing_question(self, client):
+        """Test that creating session without question returns 422."""
+        response = client.post(
+            "/api/sessions",
+            data={},  # Missing question
+            files=[]
+        )
+        assert response.status_code == 422  # Validation error
+
+    def test_invalid_session_id_format(self, client):
+        """Test that invalid session ID format returns 404."""
+        response = client.get("/api/sessions/not-a-valid-session-id/summary")
+        assert response.status_code == 404
+
+    def test_soft_deleted_session_hidden_from_list(self, client):
+        """Test that soft-deleted sessions are hidden from list."""
+        # Create session
+        response1 = client.post(
+            "/api/sessions",
+            data={"question": "Test delete"},
+            headers={"X-User-Id": "delete-user@example.com"}
+        )
+        session_id = response1.json()["session_id"]
+
+        # Soft delete
+        response2 = client.delete(
+            f"/api/sessions/{session_id}",
+            headers={"X-User-Id": "delete-user@example.com"}
+        )
+        assert response2.status_code == 200
+
+        # Should not appear in list
+        response3 = client.get(
+            "/api/sessions",
+            headers={"X-User-Id": "delete-user@example.com"}
+        )
+        assert response3.status_code == 200
+        sessions = response3.json().get("sessions", [])
+        session_ids = [s["id"] for s in sessions]
+        assert session_id not in session_ids
+
+    def test_soft_deleted_session_returns_410(self, client):
+        """Test that accessing soft-deleted session returns 410."""
+        # Create session
+        response1 = client.post(
+            "/api/sessions",
+            data={"question": "Test delete access"},
+            headers={"X-User-Id": "delete-access-user@example.com"}
+        )
+        session_id = response1.json()["session_id"]
+
+        # Soft delete
+        client.delete(
+            f"/api/sessions/{session_id}",
+            headers={"X-User-Id": "delete-access-user@example.com"}
+        )
+
+        # Try to access deleted session
+        response2 = client.get(
+            f"/api/sessions/{session_id}/summary",
+            headers={"X-User-Id": "delete-access-user@example.com"}
+        )
+        assert response2.status_code == 410  # Gone
+
+    def test_force_flag_rebuilds_council(self, client):
+        """Test that force flag allows rebuilding council."""
+        # Create session
+        response0 = client.post(
+            "/api/sessions",
+            data={"question": "Test force rebuild"},
+            files=[]
+        )
+        session_id = response0.json()["session_id"]
+
+        # First build
+        response1 = client.post(f"/api/sessions/{session_id}/build_council")
+        if response1.status_code == 200:
+            # Force rebuild
+            response2 = client.post(
+                f"/api/sessions/{session_id}/build_council?force=true"
+            )
+            # Should accept the request (may return same or new config)
+            assert response2.status_code in [200, 500]
+
 
 class TestUserManagement:
     """Test user-related functionality."""

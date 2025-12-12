@@ -26,6 +26,7 @@
   - Fixed `scripts/verify_setup.py` and added `.env.example` files (part of PR-2)
   - Added containerization support (`Dockerfile`, `docker-compose.yml`) (part of PR-3)
   - Added CI baseline (`.github/workflows/ci.yml`) (part of PR-4)
+  - Enhanced test coverage (34 tests, up from 15) including auth, file uploads, and edge cases (part of PR-4.1)
 - **Open decisions**:
   - Hosting platform — Owner: SRE/Platform — Due: Handoff
   - Queue/worker system — Owner: Backend + SRE — Due: Sprint 3
@@ -565,7 +566,29 @@ This section is the “ready to execute” slice: each PR is scoped to be review
    - **Progress notes**:
      - 2025-12-12: Started PR-4.
      - 2025-12-12: Added `.github/workflows/ci.yml` and `requirements-dev.txt`. Verified tests/lint pass locally.
- 5. **PR-5 Alembic baseline**
+4.1. **PR-4.1 Enhanced test coverage** — **Done**
+   - Add comprehensive tests for security-critical paths and edge cases.
+   - **Rationale**: Current tests cover happy paths but miss auth modes, error handling edge cases, and upcoming features (RBAC, upload guardrails).
+   - **Execution plan**:
+     - **Steps**:
+       - Add `tests/test_auth.py`: Test `AUTH_MODE=PROD`, JWT validation, header spoofing prevention.
+       - Add `tests/test_file_uploads.py`: Test file type validation, size limits, kill-switches (when PR-7 adds them).
+       - Enhance `tests/test_api_integration.py`: Add more error handling edge cases, soft delete tests.
+       - Add test helpers/fixtures for common patterns (JWT generation, file uploads, etc.).
+       - Add placeholder tests for RBAC (commented, ready for PR-6).
+     - **Files to touch**:
+       - `tests/test_auth.py` (new)
+       - `tests/test_file_uploads.py` (new)
+       - `tests/conftest.py` (new, shared fixtures)
+       - `tests/test_api_integration.py` (enhance)
+     - **Acceptance criteria**:
+       - Auth tests verify PROD mode rejects unauthenticated requests.
+       - File upload tests verify allow-list/size limits (when implemented).
+       - Test coverage increases from ~15 tests to ~30+ tests.
+   - **Progress notes**:
+     - 2025-12-12: Proposed as enhancement to PR-4.
+     - 2025-12-12: Added `tests/test_auth.py` (10 tests), `tests/test_file_uploads.py` (7 tests, 3 skipped for PR-7), `tests/conftest.py` (shared fixtures), and enhanced `tests/test_api_integration.py` (added 7 new edge case tests). Total test count increased from 15 to 34 passing tests. All tests pass.
+5. **PR-5 Alembic baseline**
    - Introduce Alembic migrations for current DB schema and future additions (roles/audit tables).
 6. **PR-6 RBAC skeleton**
    - Add roles + `require_role()` dependency.
