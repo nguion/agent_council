@@ -46,7 +46,11 @@ Security note:
 ### Authorization (current)
 - Ownership checks are enforced on all session endpoints: a user can only access sessions they own.
 - Unauthorized access returns **404** (prevents session-id enumeration).
-- There is currently **no RBAC** (admin/auditor roles) beyond ownership enforcement (planned in Sprint 1 PR-6).
+- **RBAC implemented** (Sprint 1 PR-6):
+  - Roles: `user` (default), `admin`, `auditor`
+  - `require_role()` FastAPI dependency enforces role-based access
+  - Admin-only endpoints protected (e.g., `/api/admin/metrics/summary`)
+  - New users default to `role='user'`
 
 ### Data handling and egress (current)
 See `docs/DATA_HANDLING.md` for the full matrix.
@@ -78,8 +82,10 @@ This table intentionally focuses on the threats most likely to be raised in inte
 - DB state stored in `session_state` with batched updates to reduce SQLite contention.
 - UI renders markdown without enabling raw HTML execution (as currently coded).
 
+#### Controls implemented (Sprint 1)
+- RBAC: `user` / `admin` / `auditor` roles enforced on admin endpoints (PR-6).
+
 #### Controls planned (handoff roadmap)
-- RBAC: `user` / `admin` / `auditor` roles enforced on admin endpoints.
 - File upload guardrails: allow-list + size limit + disable-uploads kill-switch.
 - Web search kill-switch enforced server-side.
 - Audit logging in DB (session access, uploads metadata, admin actions).

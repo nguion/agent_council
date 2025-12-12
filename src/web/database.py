@@ -9,6 +9,7 @@ from datetime import datetime
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     Float,
@@ -79,6 +80,18 @@ class User(Base):
     
     # Relationship
     sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
+    
+    # AI Generated Code by Deloitte + Cursor (BEGIN)
+    # Role validation constraint (enforced at database level for PostgreSQL)
+    # SQLite doesn't support CHECK constraints, so validation happens in application code
+    if not _is_sqlite:
+        __table_args__ = (
+            CheckConstraint(
+                "role IN ('user', 'admin', 'auditor')",
+                name="check_valid_role"
+            ),
+        )
+    # AI Generated Code by Deloitte + Cursor (END)
 
 
 class Session(Base):

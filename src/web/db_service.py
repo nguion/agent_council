@@ -44,11 +44,17 @@ class UserService:
         
         # Create new user
         # AI Generated Code by Deloitte + Cursor (BEGIN)
+        # Validate role (application-level validation for SQLite compatibility)
+        valid_roles = {"user", "admin", "auditor"}
+        default_role = "user"
+        if default_role not in valid_roles:
+            raise ValueError(f"Invalid default role: {default_role}")
+        
         user = User(
             id=str(uuid.uuid4()),
             external_id=external_id,
             display_name=display_name or external_id.split('@')[0],
-            role="user",  # Default role for all new users
+            role=default_role,  # Default role for all new users
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc)
         )
@@ -68,6 +74,49 @@ class UserService:
                 return existing
             # If still missing, re-raise so caller surfaces the error
             raise
+    
+    # AI Generated Code by Deloitte + Cursor (BEGIN)
+    @staticmethod
+    async def update_role(
+        db: AsyncSession,
+        external_id: str,
+        new_role: str
+    ) -> Optional[User]:
+        """
+        Update a user's role.
+        
+        Args:
+            db: Database session
+            external_id: User's external ID (email/UPN)
+            new_role: New role ('user', 'admin', 'auditor')
+            
+        Returns:
+            Updated User object, or None if user not found
+            
+        Raises:
+            ValueError: If new_role is not a valid role
+        """
+        # Validate role
+        valid_roles = {"user", "admin", "auditor"}
+        if new_role not in valid_roles:
+            raise ValueError(f"Invalid role: {new_role}. Must be one of: {valid_roles}")
+        
+        # Find user
+        result = await db.execute(
+            select(User).where(User.external_id == external_id)
+        )
+        user = result.scalar_one_or_none()
+        
+        if not user:
+            return None
+        
+        # Update role
+        user.role = new_role
+        user.updated_at = datetime.now(timezone.utc)
+        await db.flush()
+        
+        return user
+    # AI Generated Code by Deloitte + Cursor (END)
 
 
 class SessionService:

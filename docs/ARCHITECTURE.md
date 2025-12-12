@@ -82,7 +82,20 @@ Auth is handled by the backend (`src/web/api.py`) with two modes:
 Authorization model:
 - Session endpoints enforce **ownership**: a user can only access sessions they own.
 - Unauthorized access is returned as **404** (prevents enumeration).
-- Deletion is implemented as **soft delete** in the `sessions` table (with an optional “hard” flag that also removes filesystem artifacts and marks DB state as deleted).
+- Deletion is implemented as **soft delete** in the `sessions` table (with an optional "hard" flag that also removes filesystem artifacts and marks DB state as deleted).
+
+**RBAC (Role-Based Access Control)**:
+- Roles: `user` (default), `admin`, `auditor`
+- Users table includes `role` column (indexed for fast queries)
+- `require_role()` FastAPI dependency enforces role-based access on protected endpoints
+- Admin-only endpoints (e.g., `/api/admin/metrics/summary`) require `role='admin'`
+- New users are automatically assigned `role='user'` on first access
+- Role management: use `scripts/promote_user_to_admin.py` for dev/testing (production should use SSO app-role mapping)
+
+Code references:
+- RBAC dependency: `src/web/api.py` (`require_role()`)
+- User model: `src/web/database.py` (`User.role`)
+- User service: `src/web/db_service.py` (`UserService.get_or_create_user()`)
 
 ### Execution model (in-process background tasks)
 Long-running work is started via FastAPI `BackgroundTasks`:
