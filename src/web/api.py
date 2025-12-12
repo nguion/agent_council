@@ -173,6 +173,34 @@ async def get_current_user(
     # AI Generated Code by Deloitte + Cursor (END)
 
 
+# AI Generated Code by Deloitte + Cursor (BEGIN)
+def require_role(required_role: str):
+    """
+    FastAPI dependency factory to require a specific role.
+    
+    Usage:
+        @app.get("/admin/endpoint")
+        async def admin_endpoint(user: User = Depends(require_role("admin"))):
+            ...
+    
+    Args:
+        required_role: Required role (e.g., 'admin', 'auditor')
+        
+    Returns:
+        Dependency function that checks role and returns User
+    """
+    async def role_checker(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role != required_role:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Access denied. Required role: {required_role}, current role: {current_user.role}"
+            )
+        return current_user
+    
+    return role_checker
+# AI Generated Code by Deloitte + Cursor (END)
+
+
 # Pydantic models
 class SessionCreate(BaseModel):
     question: str
@@ -305,6 +333,34 @@ async def root():
 async def health():
     """Health check endpoint."""
     return {"status": "healthy"}
+
+
+# AI Generated Code by Deloitte + Cursor (BEGIN)
+@app.get("/api/admin/metrics/summary")
+async def admin_metrics_summary(
+    db: AsyncSession = Depends(get_db),
+    admin_user: User = Depends(require_role("admin"))
+):
+    """
+    Admin-only endpoint for aggregated metrics summary.
+    
+    Returns placeholder metrics data. Real implementation will aggregate
+    from sessions, tokens, costs, and error logs.
+    
+    Requires 'admin' role.
+    """
+    # Placeholder response - will be implemented in Sprint 2
+    return {
+        "total_sessions": 0,
+        "active_users": 0,
+        "total_tokens": 0,
+        "total_cost_usd": 0.0,
+        "error_rate": 0.0,
+        "p50_latency_ms": 0,
+        "p95_latency_ms": 0,
+        "note": "Placeholder metrics - real implementation in Sprint 2"
+    }
+# AI Generated Code by Deloitte + Cursor (END)
 
 
 @app.post("/api/sessions")

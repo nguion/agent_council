@@ -43,13 +43,16 @@ class UserService:
             return user
         
         # Create new user
+        # AI Generated Code by Deloitte + Cursor (BEGIN)
         user = User(
             id=str(uuid.uuid4()),
             external_id=external_id,
             display_name=display_name or external_id.split('@')[0],
+            role="user",  # Default role for all new users
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc)
         )
+        # AI Generated Code by Deloitte + Cursor (END)
         db.add(user)
         try:
             await db.flush()

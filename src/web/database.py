@@ -71,6 +71,9 @@ class User(Base):
     id = Column(String, primary_key=True)  # Internal UUID
     external_id = Column(String, unique=True, nullable=False, index=True)  # Email/UPN from SSO
     display_name = Column(String, nullable=True)
+    # AI Generated Code by Deloitte + Cursor (BEGIN)
+    role = Column(String, nullable=False, default="user", index=True)  # RBAC role: 'user', 'admin', 'auditor'
+    # AI Generated Code by Deloitte + Cursor (END)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     

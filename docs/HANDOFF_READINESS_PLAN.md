@@ -28,6 +28,7 @@
   - Added CI baseline (`.github/workflows/ci.yml`) (part of PR-4)
   - Enhanced test coverage (34 tests, up from 15) including auth, file uploads, and edge cases (part of PR-4.1)
   - Added Alembic migrations baseline (part of PR-5)
+  - Added RBAC skeleton with role enforcement and admin-only endpoint (part of PR-6)
 - **Open decisions**:
   - Hosting platform — Owner: SRE/Platform — Due: Handoff
   - Queue/worker system — Owner: Backend + SRE — Due: Sprint 3
@@ -624,9 +625,51 @@ This section is the “ready to execute” slice: each PR is scoped to be review
    - **Traceability**:
      - Commit: `db: PR-5 Alembic migrations baseline`
      - Files changed: `alembic/`, `alembic.ini`, `src/web/database.py`, `scripts/test_alembic_migrations.py` (new)
-6. **PR-6 RBAC skeleton**
+6. **PR-6 RBAC skeleton** — **Done**
    - Add roles + `require_role()` dependency.
    - Add first admin-only endpoint (e.g., `/api/admin/metrics/summary` returning placeholders).
+   - **Execution plan (this session)**:
+     - **Steps**:
+       1. Create Alembic migration to add `role` column to `users` table (default: `'user'`, nullable: False).
+       2. Update `User` model in `src/web/database.py` to include `role` field (String, default='user').
+       3. Update `UserService.get_or_create_user()` to set default role `'user'` for new users.
+       4. Create `require_role()` FastAPI dependency in `src/web/api.py` that checks user role.
+       5. Create `/api/admin/metrics/summary` endpoint protected by `require_role("admin")` with placeholder response.
+       6. Write tests for RBAC: test role enforcement, test admin endpoint access, test non-admin rejection.
+     - **Files to touch**:
+       - `alembic/versions/` (new migration file)
+       - `src/web/database.py` (add `role` to User model)
+       - `src/web/db_service.py` (update `get_or_create_user` to set default role)
+       - `src/web/api.py` (add `require_role()` dependency, add admin endpoint)
+       - `tests/test_rbac.py` (new test file)
+     - **Acceptance criteria**:
+       - Migration adds `role` column to `users` table.
+       - New users default to `role='user'`.
+       - `require_role("admin")` dependency rejects non-admin users with 403.
+       - `/api/admin/metrics/summary` returns 403 for non-admin users.
+       - `/api/admin/metrics/summary` returns placeholder data for admin users.
+       - Tests cover role enforcement and admin endpoint access.
+   - **Progress notes**:
+     - 2025-12-12: Started PR-6. Creating execution plan.
+     - 2025-12-12: **PR-6 completed**:
+       - ✅ Created Alembic migration (`8b746e4b0150`) to add `role` column to `users` table
+         - Handles SQLite (table recreation) and PostgreSQL (ALTER COLUMN) properly
+         - Sets default role='user' for existing users
+         - Creates index on `role` column for faster queries
+       - ✅ Updated `User` model to include `role` field (String, default='user', indexed)
+       - ✅ Updated `UserService.get_or_create_user()` to set default role='user' for new users
+       - ✅ Created `require_role()` FastAPI dependency factory for role-based access control
+       - ✅ Created `/api/admin/metrics/summary` admin-only endpoint with placeholder response
+       - ✅ Created comprehensive RBAC test suite (`tests/test_rbac.py`):
+         - Tests admin endpoint access (allows admin, rejects user/auditor)
+         - Tests default role assignment for new users
+         - Tests role preservation for existing users
+         - Tests migration application
+       - ✅ All 40 tests pass (34 existing + 6 new RBAC tests)
+       - **Result**: RBAC foundation is complete. Admin endpoint is protected and working. Ready for Sprint 2 admin dashboard implementation.
+   - **Traceability**:
+     - Commit: `rbac: PR-6 RBAC skeleton with role enforcement`
+     - Files changed: `alembic/versions/8b746e4b0150_*.py` (new), `src/web/database.py`, `src/web/db_service.py`, `src/web/api.py`, `tests/test_rbac.py` (new)
 7. **PR-7 Security guardrails**
    - Upload allow-list + max size + env kill-switches.
    - `DISABLE_WEB_SEARCH=true` enforced server-side.

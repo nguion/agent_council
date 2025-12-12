@@ -2,6 +2,17 @@
 
 > **ReadMe for Robots**: This file provides AI coding agents (Cursor, Claude, Copilot) with the context they need to work effectively in this codebase.
 
+<!-- AI Generated Code by Deloitte + Cursor (BEGIN) -->
+### Plan execution protocol (mandatory)
+- **If you are handed a `.md` build plan** (for example: `docs/HANDOFF_READINESS_PLAN.md`), you MUST maintain progress **inside that plan file** so others can review.
+- **Priority #1 (besides absolute code quality): keep the plan current.**
+  - Mark tasks **in progress / done**
+  - Record scope/order changes with rationale
+  - Add decision log entries (owner + due date)
+  - Add traceability (PR/commit + files touched)
+- **Do not rely on chat history** as the only record of progress; treat the plan file as the durable tracker.
+<!-- AI Generated Code by Deloitte + Cursor (END) -->
+
 ---
 
 ## What This Project Does
