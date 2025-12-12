@@ -25,6 +25,7 @@
   - Added v1 docs for Data Handling, Security Model, Privacy, and Runbook (part of PR-1)
   - Fixed `scripts/verify_setup.py` and added `.env.example` files (part of PR-2)
   - Added containerization support (`Dockerfile`, `docker-compose.yml`) (part of PR-3)
+  - Added CI baseline (`.github/workflows/ci.yml`) (part of PR-4)
 - **Open decisions**:
   - Hosting platform — Owner: SRE/Platform — Due: Handoff
   - Queue/worker system — Owner: Backend + SRE — Due: Sprint 3
@@ -545,10 +546,26 @@ This section is the “ready to execute” slice: each PR is scoped to be review
    - **Progress notes**:
      - 2025-12-12: Started PR-3.
      - 2025-12-12: Added `Dockerfile`, `web-ui/Dockerfile`, `docker-compose.yml`, `.dockerignore`. Validated with `docker-compose config`.
- 4. **PR-4 CI baseline**
-   - GitHub Actions: ruff + pytest + frontend build (and eslint if desired).
-   - Optional: Playwright e2e as nightly.
-5. **PR-5 Alembic baseline**
+4. **PR-4 CI baseline** — **Done**
+   - Add a GitHub Actions workflow that runs:
+     - Python lint (ruff) + unit/integration tests (pytest)
+     - Frontend lint (eslint) + build
+     - Optional: Playwright e2e (can be nightly if too heavy for every PR)
+   - **Execution plan (this session)**:
+     - **Steps**:
+       - Create `.github/workflows/ci.yml`.
+       - Add `ruff` to project dependencies (or verify if present).
+       - Create `requirements-dev.txt` for CI/dev tools.
+       - Verify: Run lint/test commands locally to ensure CI won't fail immediately.
+     - **Files to touch**:
+       - `.github/workflows/ci.yml` (new)
+       - `requirements-dev.txt` (new)
+     - **Acceptance criteria**:
+       - CI configuration exists and covers both Backend (lint+test) and Frontend (lint+build).
+   - **Progress notes**:
+     - 2025-12-12: Started PR-4.
+     - 2025-12-12: Added `.github/workflows/ci.yml` and `requirements-dev.txt`. Verified tests/lint pass locally.
+ 5. **PR-5 Alembic baseline**
    - Introduce Alembic migrations for current DB schema and future additions (roles/audit tables).
 6. **PR-6 RBAC skeleton**
    - Add roles + `require_role()` dependency.

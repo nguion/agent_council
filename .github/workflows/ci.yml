@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, handoff-ready ]
+  pull_request:
+    branches: [ main, handoff-ready ]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-web.txt
+          pip install -r requirements-dev.txt
+          # Install asyncpg for proper DB support detection
+          pip install asyncpg
+
+      - name: Lint with Ruff
+        run: |
+          ruff check .
+
+      - name: Test with pytest
+        env:
+          # Tests require an OpenAI API key (integration tests).
+          # Ensure this secret is set in repository settings.
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # Use a clean DEV auth mode for tests
+          AUTH_MODE: DEV
+        run: |
+          pytest tests/
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web-ui
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web-ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Uncomment if/when lint script is added to package.json
+      # - name: Lint
+      #   run: npm run lint
+
+      - name: Build
+        run: npm run build
+        env:
+          # Bake in a dummy API URL for the build verification
+          VITE_API_URL: http://localhost:8000
+
