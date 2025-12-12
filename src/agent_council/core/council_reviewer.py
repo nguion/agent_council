@@ -5,22 +5,24 @@ Handles peer review and critique among council members.
 
 import asyncio
 import json
-from typing import Dict, Any, List, Callable
-from .agent_config import AgentConfig, ReasoningEffort
+from typing import Any, Callable
+
 from .agent_builder import AgentBuilder
+from .agent_config import AgentConfig, ReasoningEffort
 from .agent_runner import run_agent
+
 
 class CouncilReviewer:
     """Manages the peer review process."""
 
     @staticmethod
     async def review_others(
-        reviewer_config: Dict[str, Any], 
+        reviewer_config: dict[str, Any], 
         question: str, 
-        other_responses: List[Dict[str, Any]],
+        other_responses: list[dict[str, Any]],
         progress_callback: Callable[[str, str], None] = None,
         logger=None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         A single agent reviews the anonymous responses of others.
         """
@@ -136,12 +138,12 @@ class CouncilReviewer:
     @classmethod
     async def run_peer_review(
         cls, 
-        council_config: Dict[str, Any], 
+        council_config: dict[str, Any], 
         question: str, 
-        execution_results: List[Dict[str, Any]],
+        execution_results: list[dict[str, Any]],
         progress_callback: Callable[[str, str], None] = None,
         logger=None
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Orchestrates parallel peer reviews.
         """

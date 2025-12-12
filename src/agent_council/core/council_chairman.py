@@ -3,11 +3,12 @@ Council Chairman Module.
 Synthesizes the final response from agent outputs and peer critiques.
 """
 
-import asyncio
-from typing import Dict, Any, List
-from .agent_config import AgentConfig, ReasoningEffort, Verbosity
+from typing import Any
+
 from .agent_builder import AgentBuilder
+from .agent_config import AgentConfig, ReasoningEffort, Verbosity
 from .agent_runner import run_agent
+
 
 class CouncilChairman:
     """The final decision maker who synthesizes the council's work."""
@@ -44,8 +45,8 @@ class CouncilChairman:
     async def synthesize(
         cls, 
         question: str, 
-        execution_results: List[Dict[str, Any]], 
-        peer_reviews: List[Dict[str, Any]],
+        execution_results: list[dict[str, Any]], 
+        peer_reviews: list[dict[str, Any]],
         logger=None
     ) -> str:
         """

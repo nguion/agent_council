@@ -4,9 +4,8 @@ Handles processing of .txt, .md, .pdf, and .docx files into standardized JSON fo
 """
 
 import os
-import json
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Any
 
 try:
     from pypdf import PdfReader
@@ -48,7 +47,7 @@ class FileIngestor:
             return f"[Error reading DOCX: {str(e)}]"
 
     @classmethod
-    def process_file(cls, filepath: str) -> Dict[str, Any]:
+    def process_file(cls, filepath: str) -> dict[str, Any]:
         """Process a single file and return its structured representation."""
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"File not found: {filepath}")
@@ -64,7 +63,7 @@ class FileIngestor:
             content = cls.extract_text_from_docx(filepath)
         elif ext in ['.txt', '.md', '.json', '.py', '.csv']:
             try:
-                with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                with open(filepath, encoding='utf-8', errors='ignore') as f:
                     content = f.read()
             except Exception as e:
                 content = f"[Error reading text file: {str(e)}]"
@@ -86,7 +85,7 @@ class FileIngestor:
         return file_data
 
     @classmethod
-    def ingest_paths(cls, paths: List[str]) -> List[Dict[str, Any]]:
+    def ingest_paths(cls, paths: list[str]) -> list[dict[str, Any]]:
         """Ingest a list of file paths."""
         results = []
         for path in paths:

@@ -2,9 +2,12 @@
 
 import asyncio
 from typing import Optional
+
 from agents import Agent, Runner
-from .agent_builder import AgentBuilder
+
 from agent_council.utils.context_condense import condense_prompt
+
+from .agent_builder import AgentBuilder
 
 
 async def run_agent(

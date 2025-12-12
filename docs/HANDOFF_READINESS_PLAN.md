@@ -1,3 +1,4 @@
+<!-- AI Generated Code by Deloitte + Cursor (BEGIN) -->
 ## Agent Council — Internal Deployment Readiness Plan (Handoff Roadmap)
 
 ### Audience
@@ -32,6 +33,20 @@ This roadmap intentionally produces concrete artifacts a real team expects:
   - CI that runs lint/tests on PRs
   - Alembic migrations (no “create tables on startup” in prod path)
   - Clear configuration via environment variables (`.env.example`, `web-ui/.env.example`)
+
+## 10 upgrades to make this plan execution-ready (this update)
+Each item below is a concrete enhancement that turns this document from “directionally correct” into an executable backlog/spec. The corresponding details are added in the **Execution-ready details** section later in this file.
+
+1. **Assumptions & constraints** (no hosting decision yet; OpenAI API provider fixed; SSO integrated by another team) — define what this plan does/doesn’t assume.
+2. **RACI (roles & responsibilities)** — clarify who owns security, SSO, backend, frontend, ops, and approvals.
+3. **Decision log + open decisions** — prevent “tribal knowledge”; make sure unknowns are tracked without blocking progress.
+4. **Execution backlog + PR sequencing** — convert each sprint into a set of shippable PRs with clear acceptance tests.
+5. **Data handling matrix** — spell out exactly what data is stored where, what is sent externally, and retention/deletion expectations.
+6. **Threat model + control checklist** — map top risks (exfiltration, cross-user access, uploads) to concrete mitigations and tests.
+7. **RBAC spec + Entra app-role mapping** — make admin/auditor controls unambiguous and easy for SSO team to wire.
+8. **Admin dashboard spec (usage + performance)** — define metrics, data sources, endpoints, and UI scope.
+9. **Observability + SLOs** — define the minimum viable logging/metrics/tracing needed to run this safely at scale.
+10. **CI/CD + deployment packaging + env-var matrix** — make the repo runnable by a real team immediately (local and CI) without guessing.
 
 ---
 
@@ -217,7 +232,7 @@ Acceptance criteria:
 - A new engineer can run “verify setup” and follow docs without hitting dead ends.
 - Data handling is clearly documented, including external LLM provider boundary.
 - RBAC exists and at least one endpoint is admin-only (to prove wiring).
- - CI runs on PRs and is green on main.
+- CI runs on PRs and is green on main.
 
 ### Sprint 2 — Admin telemetry + audit logs + quotas/rate limits (Risk & Ops)
 **Objective:** make security and operational controls real, not aspirational; provide admin visibility.
@@ -336,7 +351,205 @@ Minimum controls (Sprint 1–3):
 These are useful “north stars” for internal security review and production readiness:
 - [OWASP ASVS](https://owasp.org/www-project-application-security-verification-standard/)
 - [OWASP Cheat Sheet Series](https://cheatsheetseries.owasp.org/)
+- [OWASP File Upload Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html)
+- [OWASP Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html)
 - [Microsoft identity platform (Entra ID)](https://learn.microsoft.com/en-us/entra/identity-platform/)
+- [Microsoft Entra ID — App roles](https://learn.microsoft.com/en-us/entra/identity-platform/howto-add-app-roles-in-apps)
 - [Microsoft guidance on secure application development](https://learn.microsoft.com/en-us/security/)
+- [FastAPI — Background Tasks](https://fastapi.tiangolo.com/tutorial/background-tasks/)
+- [OpenAI — “Your data” (API data handling)](https://platform.openai.com/docs/guides/your-data)
 
+---
+
+## Execution-ready details (researched + expanded)
+
+### 1) Assumptions & constraints (what this plan assumes)
+- **LLM provider**: The current OpenAI API integration is considered “correct for now”.
+- **Hosting**: Unknown/undecided. All architecture changes should be **deployment-agnostic** (container-friendly, stateless where possible).
+- **SSO**: Will be Deloitte Microsoft-based SSO (Entra ID / Azure AD). This repo should only provide **clean integration contracts** and a safe dev stub.
+- **Risk posture**: Treat uploads/prompts/responses as potentially **sensitive client data** unless policy says otherwise.
+- **Non-breaking constraint**: The app should remain runnable locally throughout the work. “Seams first; swaps later.”
+
+### 2) RACI (roles & responsibilities)
+Use this as the handoff team’s “who owns what” map. Replace names once a real team is assigned.
+
+| Work area | Responsible | Accountable | Consulted | Informed |
+|---|---|---|---|---|
+| Backend API + DB schema | Backend Eng | Tech Lead | Security/Risk, SRE | Product |
+| Frontend UI + routing | Frontend Eng | Tech Lead | Security/Risk | Product |
+| Identity/SSO integration (Entra) | SSO/Identity Eng | Security Lead | Backend Eng | Product |
+| RBAC policy (roles/permissions) | Backend Eng | Security Lead | Product | All |
+| File upload policy + DLP/AV scanning requirements | Security/Risk | Security Lead | Product, Backend Eng | All |
+| Observability (logs/metrics/tracing) | SRE/Platform Eng | SRE Lead | Backend Eng | All |
+| Rate limits + quota policy | Backend Eng | Product | Security/Risk | All |
+| Admin dashboard metrics definitions | Product + Backend Eng | Product | SRE, Security/Risk | All |
+| Data retention + deletion policy | Security/Risk | Security Lead | Product | All |
+
+### 3) Decision log + open decisions (avoid churn)
+Keep this table current as decisions get made. Default stance: **track unknowns without blocking Sprint 1 work**.
+
+| Decision area | Current default | Rationale | Owner | Due |
+|---|---|---|---|---|
+| Hosting platform | TBD | Don’t block; keep changes portable | SRE/Platform | Handoff |
+| Queue/worker system | TBD (seam first) | Avoid locking in Celery/Redis if platform team prefers alternatives | Backend + SRE | Sprint 3 |
+| Artifact storage | TBD (seam first) | Object storage likely; don’t block dev | Backend + SRE | Sprint 3 |
+| SSO mode | Trusted header OR JWT | Both supported already; final depends on gateway pattern | SSO/Identity | Sprint 1–2 |
+| Uploads allowed? | Allowed in dev; controllable in prod | Risk posture differs by environment | Security/Risk | Sprint 1 |
+| Prompt/response logging | Off by default in prod | Minimize sensitive data sprawl | Security/Risk | Sprint 2 |
+| Retention window | TBD (configurable) | Must be approved | Security/Risk | Sprint 2 |
+
+### 4) Execution backlog + PR sequencing (turn sprints into “doable PRs”)
+This section is the “ready to execute” slice: each PR is scoped to be reviewable and reversible.
+
+#### Sprint 1 — suggested PR sequence
+1. **PR-1 Docs alignment**
+   - Update `docs/ARCHITECTURE.md` to match DB-primary state and in-process BackgroundTasks reality.
+   - Add `docs/DATA_HANDLING.md`, `docs/SECURITY_MODEL.md`, `docs/PRIVACY_NOTES.md`, `docs/RUNBOOK.md` stubs (high-level first; iterate later).
+2. **PR-2 DX fixes**
+   - Fix `scripts/verify_setup.py` (it currently references removed files and missing docs).
+   - Add `.env.example` + `web-ui/.env.example`.
+3. **PR-3 Containerized local dev**
+   - Add backend `Dockerfile`, frontend `web-ui/Dockerfile` (or document why not).
+   - Add minimal `docker-compose.yml` (Postgres + backend + frontend). Keep optional.
+4. **PR-4 CI baseline**
+   - GitHub Actions: ruff + pytest + frontend build (and eslint if desired).
+   - Optional: Playwright e2e as nightly.
+5. **PR-5 Alembic baseline**
+   - Introduce Alembic migrations for current DB schema and future additions (roles/audit tables).
+6. **PR-6 RBAC skeleton**
+   - Add roles + `require_role()` dependency.
+   - Add first admin-only endpoint (e.g., `/api/admin/metrics/summary` returning placeholders).
+7. **PR-7 Security guardrails**
+   - Upload allow-list + max size + env kill-switches.
+   - `DISABLE_WEB_SEARCH=true` enforced server-side.
+
+#### Sprint 2 — suggested PR sequence
+1. **PR-8 Audit logging + event model**
+2. **PR-9 Quotas/rate limiting**
+3. **PR-10 Admin metrics endpoints (real)**
+4. **PR-11 Admin dashboard UI route `/admin`**
+
+#### Sprint 3 — suggested PR sequence
+1. **PR-12 JobRunner abstraction (in-process default)**
+2. **PR-13 StorageProvider abstraction (local default)**
+3. **PR-14 State model refactor: remove full extracted text from `session_state`**
+
+### 5) Data handling matrix (the Risk team’s #1 question)
+This is the single most important “clarity artifact” for internal rollout discussions.
+
+#### Data handling table (current and target)
+| Data | Current behavior | Where stored (current) | Sent to external LLM? | Target behavior (handoff-ready) |
+|---|---|---|---|---|
+| User identity | `external_id` from header/JWT | DB (`users`) | No | Same |
+| Session metadata | question, status, timestamps | DB (`sessions`) | Question: yes | Same; add pagination |
+| Uploaded file bytes | saved server-side | Local disk (`sessions/{id}/uploaded_files`) | Indirectly (after extraction) | StorageProvider → object storage in prod |
+| Extracted text | extracted and saved in state | DB JSON (`session_state.state.ingested_data`) | **Yes** | Move extracted text to separate store; keep only bounded summaries/snippets in state |
+| Prompts/responses | constructed by core | In memory; may be logged | **Yes** | Default: do not persist raw prompts/responses in prod |
+| Web search queries | optional tool use | N/A | Possibly (3rd parties) | Default off; admin kill-switch; user acknowledgement |
+| LLM call logs | markdown file | Local disk (`sessions/{id}/logs`) | N/A | StorageProvider; redaction policy; retention controls |
+| Audit events | none today | N/A | No | DB `audit_events` with minimal metadata |
+
+#### Required user-facing disclosure (for later UI/legal review)
+- If uploads are enabled: “Uploaded documents may be processed and their content may be sent to the configured LLM provider to generate results.”
+- If web search is enabled: “Queries may be sent to external search providers.”
+
+### 6) Threat model + control checklist (security made concrete)
+This keeps the plan “proven and comprehensive” by naming the threats and the specific mitigations.
+
+#### Top threats (minimum list)
+| Threat | Example | Primary mitigation | How we test |
+|---|---|---|---|
+| Cross-user data access | user A loads user B’s session by URL | strict ownership checks; 404 on unauthorized | integration tests for isolation; negative tests |
+| Header spoofing | attacker sets `X-User-Id` in prod | enforce `AUTH_MODE=PROD`; disable `AUTH_ALLOW_X_USER_ID_IN_PROD` | config tests; deploy guardrails |
+| Sensitive data exfiltration | client doc text sent to external LLM | disclosure + policy + kill-switch + DLP (handoff) | config tests; user acknowledgement in UI |
+| Malicious file upload | malware in PDF | allow-list + size limit; (handoff) AV scanning | unit tests for allow-list/limits |
+| Prompt injection via uploads | uploaded doc tells model to leak secrets | treat uploads as untrusted; instruction hardening; least tool access | red-team test set; prompt-injection test cases |
+| Budget runaway | accidental reruns or huge docs | idempotence + quotas + size limits | tests + admin metrics |
+| XSS in rendered markdown | model returns HTML/script | keep `react-markdown` safe defaults (no raw HTML) | frontend security test; dependency review |
+
+#### Control checklist (baseline)
+- **Auth**: `AUTH_MODE=PROD` required in production; deny unauthenticated requests.
+- **Authz**: ownership enforcement on all session endpoints; RBAC for admin endpoints.
+- **Uploads**: allow-list extensions + MIME sniffing + max bytes; kill-switch env var.
+- **Logging**: production default should avoid storing raw prompts/responses; audit log is metadata-only.
+- **Retention**: documented and configurable; deletion paths tested.
+- **Rate limiting/quotas**: per-user throttles for expensive operations; budget caps.
+
+### 7) RBAC spec + Entra app roles mapping
+#### Roles (initial)
+- **user**: can create/read/update/delete their own sessions (soft delete).
+- **admin**: can view aggregated metrics, configure global limits, and manage retention settings.
+- **auditor** (optional): can view compliance metadata and audit logs (not raw content by default).
+
+#### Permission matrix (illustrative)
+| Capability | user | auditor | admin |
+|---|---:|---:|---:|
+| Create session | ✅ | ✅ | ✅ |
+| View own sessions | ✅ | ✅ | ✅ |
+| View other users’ session *content* | ❌ | ⚠️ (policy) | ⚠️ (policy) |
+| View audit logs | ❌ | ✅ | ✅ |
+| View admin metrics dashboard | ❌ | ✅ | ✅ |
+| Change global limits (quotas, kill-switches) | ❌ | ❌ | ✅ |
+
+#### Entra app roles mapping (handoff-ready stub)
+- Use Entra “App roles” (preferred) so tokens contain a `roles` claim (more stable than group overage).
+- Backend should map token `roles` → internal roles (`admin`, `auditor`).
+- Dev stub: allow setting role via local config (never via arbitrary headers in PROD).
+
+### 8) Admin dashboard spec (usage + performance)
+#### Metrics to expose (minimum viable)
+- **Usage**: sessions created/day, sessions executed/day, active users (DAU/WAU), tokens + cost totals by day, by model.
+- **Performance**: duration p50/p95 for build/execute/review/synthesize, queue wait time (when queue exists).
+- **Reliability**: error rate by endpoint and by job stage; top error messages (redacted).
+
+#### Data sources (what we must record)
+- Add a DB event model (either `audit_events` + structured fields or a dedicated `metrics_events` table) capturing:
+  - timestamp, user_id, session_id, event_type, duration_ms, tokens, cost_usd, model, status.
+
+#### Admin API endpoints (example)
+- `GET /api/admin/metrics/summary`
+- `GET /api/admin/metrics/time_series?metric=tokens&window=30d`
+- `GET /api/admin/audit?since=...&limit=...`
+
+#### Admin UI (scope)
+- Route: `/admin`
+- RBAC gated
+- Read-only dashboards first (no destructive controls in v1).
+
+### 9) Observability + SLOs (minimum viable)
+#### Logging
+- Structured logs (JSON) with:
+  - `request_id`, `user_id` (or hashed), `session_id`, `stage`, `status`, `duration_ms`
+- Do not log raw document contents or prompts in production by default.
+
+#### Metrics (minimum)
+- API: request count, latency histograms, error rate by endpoint
+- Jobs: duration histograms per stage, success/fail counts
+- Cost: tokens/cost per stage (already available via `SessionLogger` totals)
+
+#### Initial SLO suggestions (for later tuning)
+- `/api/sessions/{id}/summary`: p95 < 300ms (DB read only)
+- `/api/sessions` list: p95 < 300ms with pagination
+- job completion: “execute completes successfully” > 98% (excluding provider outages)
+
+### 10) CI/CD + deployment packaging + environment variable matrix
+#### CI quality gates (recommended)
+- Python: ruff + pytest
+- Frontend: eslint + build
+- Optional: Playwright e2e (nightly)
+- Security: dependency audit + secret scanning
+
+#### Environment variable matrix (baseline)
+| Variable | Dev | Prod | Notes |
+|---|---:|---:|---|
+| `OPENAI_API_KEY` | ✅ | ✅ | secret |
+| `DATABASE_URL` | ✅ | ✅ | Postgres in prod strongly recommended |
+| `AUTH_MODE` | ✅ | ✅ | must be `PROD` in prod |
+| `AUTH_JWT_*` | ❌/✅ | ✅ | if JWT auth is used |
+| `AUTH_ALLOW_X_USER_ID_IN_PROD` | ❌ | ❌ | keep false by default |
+| `DISABLE_UPLOADS` | optional | optional | risk control |
+| `DISABLE_WEB_SEARCH` | optional | optional | risk control |
+
+---
+<!-- AI Generated Code by Deloitte + Cursor (END) -->
 

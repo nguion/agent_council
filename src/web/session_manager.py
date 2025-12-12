@@ -4,11 +4,9 @@ Handles filesystem operations for session data (uploads, logs, directories).
 State management is now handled by SessionStateService (database-backed).
 """
 
-import os
-import uuid
 import shutil
+import uuid
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List
 from pathlib import Path
 
 
@@ -89,7 +87,7 @@ class SessionManager:
             print(f"Error saving file {filename}: {e}")
             raise
     
-    def get_uploaded_files(self, session_id: str) -> List[str]:
+    def get_uploaded_files(self, session_id: str) -> list[str]:
         """Get list of uploaded file paths for a session."""
         uploads_dir = self._get_uploads_dir(session_id)
         if not uploads_dir.exists():

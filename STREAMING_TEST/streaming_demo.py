@@ -31,8 +31,8 @@ Notes:
 
 import argparse
 import os
-import sys
-from typing import Iterable, Optional
+from collections.abc import Iterable
+from typing import Optional
 
 from openai import OpenAI
 

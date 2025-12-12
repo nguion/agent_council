@@ -1,7 +1,6 @@
 """Agent configuration module - defines configuration structure."""
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Literal
 from enum import Enum
 
 
@@ -31,10 +30,10 @@ class AgentConfig:
     # Tools
     enable_web_search: bool = False
     enable_file_search: bool = False
-    file_search_vector_store_ids: List[str] = field(default_factory=list)
+    file_search_vector_store_ids: list[str] = field(default_factory=list)
     enable_shell: bool = False
     enable_code_interpreter: bool = False
-    custom_tools: List = field(default_factory=list)
+    custom_tools: list = field(default_factory=list)
     
     # Model settings
     reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM

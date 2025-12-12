@@ -11,17 +11,17 @@ Tests cover:
 Run with: pytest test_api_integration.py -v
 """
 
-import pytest
 import asyncio
-import tempfile
 import os
-from pathlib import Path
+import tempfile
+
+import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 # Import the app and database components
 from src.web.api import app
-from src.web.database import Base, get_db, init_db
+from src.web.database import Base, get_db
 from src.web.state_service import DatabaseBusyError
 
 
@@ -180,14 +180,15 @@ class TestConcurrency:
     @pytest.mark.asyncio
     async def test_concurrent_updates_no_lock(self, test_db):
         """Test that concurrent updates don't cause database locks."""
-        from src.web.state_service import SessionStateService
-        from src.web.db_service import UserService, SessionService
         from datetime import datetime, timezone
+
+        from src.web.db_service import SessionService, UserService
+        from src.web.state_service import SessionStateService
         
         # Create test session
         async with test_db() as db:
             user = await UserService.get_or_create_user(db, "test@example.com")
-            session = await SessionService.create_session_metadata(
+            await SessionService.create_session_metadata(
                 db, "test_session_123", user.id, "Test question"
             )
             await SessionStateService.init_state(

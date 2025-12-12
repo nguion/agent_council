@@ -3,13 +3,21 @@
 import os
 import subprocess
 from typing import Optional
+
 from dotenv import load_dotenv
 
 # Import agents SDK
 try:
     from agents import (
-        Agent, WebSearchTool, FileSearchTool, ShellTool, CodeInterpreterTool,
-        set_default_openai_key, ModelSettings, Runner, set_tracing_disabled
+        Agent,
+        CodeInterpreterTool,
+        FileSearchTool,
+        ModelSettings,
+        Runner,
+        ShellTool,
+        WebSearchTool,
+        set_default_openai_key,
+        set_tracing_disabled,
     )
     AGENTS_AVAILABLE = True
 except ImportError:

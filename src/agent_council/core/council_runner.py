@@ -4,11 +4,12 @@ Orchestrates the parallel execution of the agent council.
 """
 
 import asyncio
-import json
-from typing import Dict, Any, List, Callable
-from .agent_config import AgentConfig, ReasoningEffort
+from typing import Any, Callable
+
 from .agent_builder import AgentBuilder
+from .agent_config import AgentConfig, ReasoningEffort
 from .agent_runner import run_agent
+
 
 class CouncilRunner:
     """Executes the council agents in parallel."""
@@ -23,12 +24,12 @@ class CouncilRunner:
 
     @staticmethod
     async def run_single_agent(
-        agent_config: Dict[str, Any],
+        agent_config: dict[str, Any],
         prompt: str,
         progress_callback: Callable[[str, str], None] = None,
         logger=None,
         max_turns: int = 10,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Builds and runs a single agent.
         Returns a dict with the agent's identity, response, and TLDR.
@@ -40,9 +41,12 @@ class CouncilRunner:
         try:
             effort_str = agent_config.get('reasoning_effort', 'medium').lower()
             effort_enum = ReasoningEffort.MEDIUM
-            if effort_str == 'high': effort_enum = ReasoningEffort.HIGH
-            elif effort_str == 'low': effort_enum = ReasoningEffort.LOW
-            elif effort_str == 'none': effort_enum = ReasoningEffort.NONE
+            if effort_str == 'high':
+                effort_enum = ReasoningEffort.HIGH
+            elif effort_str == 'low':
+                effort_enum = ReasoningEffort.LOW
+            elif effort_str == 'none':
+                effort_enum = ReasoningEffort.NONE
 
             # Standardized Task Instruction with TLDR request
             STANDARD_TASK = (
@@ -136,12 +140,12 @@ class CouncilRunner:
     @classmethod
     async def execute_council(
         cls, 
-        council_config: Dict[str, Any], 
+        council_config: dict[str, Any], 
         question: str, 
-        context_data: List[Dict[str, Any]],
+        context_data: list[dict[str, Any]],
         progress_callback: Callable[[str, str], None] = None,
         logger=None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Runs all agents in the council in parallel.
         """

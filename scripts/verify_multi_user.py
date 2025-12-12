@@ -8,10 +8,9 @@ Tests that:
 4. Database metadata stays in sync with file state
 """
 
-import asyncio
 import sys
+
 import requests
-from datetime import datetime
 
 API_BASE = "http://localhost:8000"
 
@@ -145,12 +144,12 @@ def main():
     
     # Verify counts
     if len(alice_sessions) == 2:
-        print(f"✓ Alice correctly sees 2 sessions")
+        print("✓ Alice correctly sees 2 sessions")
     else:
         print(f"✗ FAILED: Alice should see 2 sessions, but sees {len(alice_sessions)}")
     
     if len(bob_sessions) == 1:
-        print(f"✓ Bob correctly sees 1 session")
+        print("✓ Bob correctly sees 1 session")
     else:
         print(f"✗ FAILED: Bob should see 1 session, but sees {len(bob_sessions)}")
     
@@ -182,7 +181,7 @@ def main():
     print("\nVerifying Alice's session list after deletion:")
     alice_sessions_after = test_list_sessions(user1)
     if len(alice_sessions_after) == 1:
-        print(f"✓ Alice correctly sees 1 session after deleting one")
+        print("✓ Alice correctly sees 1 session after deleting one")
     else:
         print(f"✗ FAILED: Alice should see 1 session, but sees {len(alice_sessions_after)}")
     
@@ -190,7 +189,7 @@ def main():
     print("\nVerifying Bob's session list is unchanged:")
     bob_sessions_after = test_list_sessions(user2)
     if len(bob_sessions_after) == 1:
-        print(f"✓ Bob's session count unchanged (still 1)")
+        print("✓ Bob's session count unchanged (still 1)")
     else:
         print(f"✗ FAILED: Bob should still see 1 session, but sees {len(bob_sessions_after)}")
     
@@ -213,7 +212,7 @@ def main():
             default_sessions = response.json().get('sessions', [])
             print(f"✓ Default user sees {len(default_sessions)} session(s)")
         else:
-            print(f"✗ Failed to list sessions for default user")
+            print("✗ Failed to list sessions for default user")
     else:
         print(f"✗ Failed to create session for default user: {response.status_code}")
     

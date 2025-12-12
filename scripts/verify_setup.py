@@ -3,9 +3,10 @@
 Quick test script to verify the Agent Council web app setup.
 """
 
-import sys
 import os
+import sys
 from pathlib import Path
+
 
 def check_file(path, description):
     """Check if a file exists."""
@@ -72,7 +73,7 @@ def main():
     # Check if .env has API key
     print("\n🔑 Checking API Key:")
     if Path(".env").exists():
-        with open(".env", "r") as f:
+        with open(".env") as f:
             content = f.read()
             if "OPENAI_API_KEY" in content and "sk-" in content:
                 print("✅ OPENAI_API_KEY found in .env")

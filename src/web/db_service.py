@@ -3,13 +3,14 @@ Database service for user and session metadata operations.
 """
 
 import uuid
-from typing import Optional, List
 from datetime import datetime, timezone
+from typing import Optional
+
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .database import User, Session
+from .database import Session, User
 
 
 class UserService:
@@ -133,7 +134,7 @@ class SessionService:
         db: AsyncSession,
         user_id: str,
         include_deleted: bool = False
-    ) -> List[Session]:
+    ) -> list[Session]:
         """
         List all sessions for a user.
         
@@ -148,7 +149,7 @@ class SessionService:
         query = select(Session).where(Session.user_id == user_id)
         
         if not include_deleted:
-            query = query.where(Session.is_deleted == False)
+            query = query.where(not Session.is_deleted)
         
         query = query.order_by(Session.created_at.desc())
         

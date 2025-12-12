@@ -4,10 +4,12 @@ Uses an LLM agent to analyze a query and context, then proposes a council of age
 """
 
 import json
-from typing import List, Dict, Any
-from .agent_config import AgentConfig, ReasoningEffort, Verbosity
+from typing import Any
+
 from .agent_builder import AgentBuilder
+from .agent_config import AgentConfig, ReasoningEffort, Verbosity
 from .agent_runner import run_agent
+
 
 class CouncilBuilder:
     """Manages the creation of agent councils."""
@@ -48,7 +50,7 @@ class CouncilBuilder:
     """
 
     @classmethod
-    async def build_council(cls, question: str, context_data: List[Dict[str, Any]], logger=None) -> Dict[str, Any]:
+    async def build_council(cls, question: str, context_data: list[dict[str, Any]], logger=None) -> dict[str, Any]:
         """
         Generates a council configuration based on the question and context.
         """

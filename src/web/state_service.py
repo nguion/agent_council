@@ -3,15 +3,17 @@ Session State Service for DB-backed session state management.
 Replaces file-based state.json with database JSON storage.
 """
 
-import copy
 import asyncio
+import copy
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import OperationalError
+from typing import Any, Optional
 
-from .database import Session as DBSession, SessionState, AsyncSessionLocal
+from sqlalchemy import select, update
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .database import AsyncSessionLocal, SessionState
+from .database import Session as DBSession
 
 
 class DatabaseBusyError(Exception):
@@ -23,8 +25,8 @@ class SessionStateService:
     """Service for managing session state in the database."""
 
     # In-memory batching for progress updates (per session)
-    _pending_updates: Dict[str, Dict[str, Any]] = {}
-    _pending_tasks: Dict[str, asyncio.Task] = {}
+    _pending_updates: dict[str, dict[str, Any]] = {}
+    _pending_tasks: dict[str, asyncio.Task] = {}
     _pending_lock = asyncio.Lock()
     
     @staticmethod
@@ -71,7 +73,7 @@ class SessionStateService:
         db: AsyncSession,
         session_id: str,
         user_id: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[dict[str, Any]]:
         """
         Get the current state of a session from the database.
         
@@ -98,7 +100,7 @@ class SessionStateService:
         user_id: str,
         question: str,
         created_at: Optional[datetime] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Initialize state for a new session.
         
@@ -146,9 +148,9 @@ class SessionStateService:
     async def update_state(
         db: AsyncSession,
         session_id: str,
-        updates: Dict[str, Any],
+        updates: dict[str, Any],
         user_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Update specific fields in the session state with deep merge support.
         Also syncs relevant fields to Session table columns.
@@ -188,7 +190,7 @@ class SessionStateService:
         session_id: str,
         status: str,
         current_step: Optional[str] = None,
-        extra_updates: Optional[Dict[str, Any]] = None,
+        extra_updates: Optional[dict[str, Any]] = None,
         user_id: Optional[str] = None
     ):
         """
@@ -217,7 +219,7 @@ class SessionStateService:
     async def update_state_batched(
         cls,
         session_id: str,
-        updates: Dict[str, Any],
+        updates: dict[str, Any],
         user_id: Optional[str] = None,
         delay: float = 0.35
     ):
@@ -258,7 +260,7 @@ class SessionStateService:
                 print(f"Error: retry failed for {session_id}: {e2}")
     
     @staticmethod
-    def _deep_merge(base: Dict[str, Any], updates: Dict[str, Any]) -> Dict[str, Any]:
+    def _deep_merge(base: dict[str, Any], updates: dict[str, Any]) -> dict[str, Any]:
         """
         Deep merge updates into base dictionary.
         For nested dicts, merge recursively. For other types, overwrite.
@@ -286,7 +288,7 @@ class SessionStateService:
 
     @staticmethod
     # AI Generated Code by Deloitte + Cursor (BEGIN)
-    async def _persist_state(db: AsyncSession, session_id: str, state: Dict[str, Any]):
+    async def _persist_state(db: AsyncSession, session_id: str, state: dict[str, Any]):
         """Upsert into SessionState (DB-only)."""
         state_row = await db.get(SessionState, session_id)
         if not state_row:
@@ -301,7 +303,7 @@ class SessionStateService:
     async def _sync_session_metadata(
         db: AsyncSession,
         session_id: str,
-        merged_state: Dict[str, Any],
+        merged_state: dict[str, Any],
         user_id: Optional[str] = None
     ):
         """Sync key metadata fields onto the sessions table for fast querying."""

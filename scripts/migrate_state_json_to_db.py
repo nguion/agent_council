@@ -12,8 +12,8 @@ import asyncio
 import json
 import os
 import sys
-from pathlib import Path
 from datetime import datetime, timezone
+from pathlib import Path
 
 # AI Generated Code by Deloitte + Cursor (BEGIN)
 # Add project root to path for imports (so `src.*` namespace imports work)
@@ -21,8 +21,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT))
 # AI Generated Code by Deloitte + Cursor (END)
 
-from src.web.database import init_db, AsyncSessionLocal, User, Session as DBSession, SessionState
-from src.web.db_service import UserService, SessionService
+from src.web.database import AsyncSessionLocal, SessionState, User, init_db  # noqa: E402
+from src.web.database import Session as DBSession  # noqa: E402
+from src.web.db_service import SessionService, UserService  # noqa: E402
 
 
 async def migrate_sessions():
@@ -71,7 +72,7 @@ async def migrate_sessions():
             
             try:
                 # Load state from file
-                with open(state_file, 'r', encoding='utf-8') as f:
+                with open(state_file, encoding='utf-8') as f:
                     state = json.load(f)
 
                 # AI Generated Code by Deloitte + Cursor (BEGIN)

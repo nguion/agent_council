@@ -17,7 +17,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from rich.console import Console
 from rich.live import Live
@@ -25,13 +25,13 @@ from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
+from agent_council.core.council_builder import CouncilBuilder
+from agent_council.core.council_chairman import CouncilChairman
+from agent_council.core.council_editor import CouncilEditor
+from agent_council.core.council_reviewer import CouncilReviewer
+from agent_council.core.council_runner import CouncilRunner
 from agent_council.utils.file_ingestion import FileIngestor
 from agent_council.utils.session_logger import SessionLogger
-from agent_council.core.council_builder import CouncilBuilder
-from agent_council.core.council_editor import CouncilEditor
-from agent_council.core.council_runner import CouncilRunner
-from agent_council.core.council_reviewer import CouncilReviewer
-from agent_council.core.council_chairman import CouncilChairman
 
 # ---------------------------------------------------------------------------
 # Paths / constants
@@ -150,7 +150,7 @@ def start_postgres_container() -> Optional[str]:
     return cid or PG_CONTAINER
 
 
-def _launch_process(cmd, cwd, log_path, env: Dict[str, Any]):
+def _launch_process(cmd, cwd, log_path, env: dict[str, Any]):
     LOG_DIR.mkdir(exist_ok=True)
     log_file = open(log_path, "w", encoding="utf-8")
     kwargs = {"cwd": cwd, "env": env, "stdout": log_file, "stderr": log_file}
@@ -201,7 +201,7 @@ def stop_container():
     subprocess.run(["docker", "stop", PG_CONTAINER], capture_output=True)
 
 
-def load_runtime() -> Dict[str, Any]:
+def load_runtime() -> dict[str, Any]:
     if not RUNTIME_FILE.exists():
         return {}
     try:
@@ -210,7 +210,7 @@ def load_runtime() -> Dict[str, Any]:
         return {}
 
 
-def save_runtime(data: Dict[str, Any]):
+def save_runtime(data: dict[str, Any]):
     LOG_DIR.mkdir(exist_ok=True)
     RUNTIME_FILE.write_text(json.dumps(data, indent=2))
 
@@ -436,7 +436,7 @@ async def main_async():
         return
 
     exec_status = {a.get("name", "Unknown"): "Queued" for a in agents}
-    final_results: Dict[str, Any] = {}
+    final_results: dict[str, Any] = {}
     with Live(build_status_table(exec_status, "Execution Progress"), refresh_per_second=8, console=console) as live:
         def exec_callback(name: str, status: str):
             exec_status[name] = status

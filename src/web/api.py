@@ -6,20 +6,22 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import List, Optional
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, BackgroundTasks, Depends, Header
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
-from pydantic import BaseModel
 from pathlib import Path
+from typing import Optional
+
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .session_manager import SessionManager
-from .services import AgentCouncilService
-from .database import get_db, init_db, AsyncSessionLocal, User, Session as DBSession
-from .db_service import UserService, SessionService
-from .state_service import SessionStateService, DatabaseBusyError
 from agent_council.utils.session_logger import SessionLogger
+
+from .database import AsyncSessionLocal, User, get_db, init_db
+from .database import Session as DBSession
+from .db_service import SessionService, UserService
+from .services import AgentCouncilService
+from .session_manager import SessionManager
+from .state_service import DatabaseBusyError, SessionStateService
 
 
 # Database initialization on startup
@@ -179,7 +181,7 @@ class SessionCreate(BaseModel):
 class CouncilConfig(BaseModel):
     council_name: Optional[str] = None
     strategy_summary: Optional[str] = None
-    agents: List[dict]
+    agents: list[dict]
 
 
 class ErrorResponse(BaseModel):
@@ -308,7 +310,7 @@ async def health():
 @app.post("/api/sessions")
 async def create_session(
     question: str = Form(...),
-    files: List[UploadFile] = File(default=[]),
+    files: list[UploadFile] = File(default=[]),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):

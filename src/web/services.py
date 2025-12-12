@@ -3,21 +3,21 @@ Service Layer Module.
 Wraps core Agent Council functionality for use in web API without CLI dependencies.
 """
 
-import asyncio
-from typing import Dict, Any, List, Callable, Optional
+from typing import Any, Callable, Optional
+
+from agent_council.core.council_builder import CouncilBuilder
+from agent_council.core.council_chairman import CouncilChairman
+from agent_council.core.council_reviewer import CouncilReviewer
+from agent_council.core.council_runner import CouncilRunner
 from agent_council.utils.file_ingestion import FileIngestor
 from agent_council.utils.session_logger import SessionLogger
-from agent_council.core.council_builder import CouncilBuilder
-from agent_council.core.council_runner import CouncilRunner
-from agent_council.core.council_reviewer import CouncilReviewer
-from agent_council.core.council_chairman import CouncilChairman
 
 
 class AgentCouncilService:
     """Service layer for Agent Council operations."""
     
     @staticmethod
-    def ingest_files(file_paths: List[str]) -> List[Dict[str, Any]]:
+    def ingest_files(file_paths: list[str]) -> list[dict[str, Any]]:
         """
         Ingest context files.
         
@@ -32,9 +32,9 @@ class AgentCouncilService:
     @staticmethod
     async def build_council(
         question: str,
-        ingested_data: List[Dict[str, Any]],
+        ingested_data: list[dict[str, Any]],
         logger: Optional[SessionLogger] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Build a council configuration using the Architect agent.
         
@@ -50,12 +50,12 @@ class AgentCouncilService:
     
     @staticmethod
     async def execute_council(
-        council_config: Dict[str, Any],
+        council_config: dict[str, Any],
         question: str,
-        ingested_data: List[Dict[str, Any]],
+        ingested_data: list[dict[str, Any]],
         progress_callback: Optional[Callable[[str, str], None]] = None,
         logger: Optional[SessionLogger] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Execute all agents in the council in parallel.
         
@@ -79,12 +79,12 @@ class AgentCouncilService:
     
     @staticmethod
     async def run_peer_review(
-        council_config: Dict[str, Any],
+        council_config: dict[str, Any],
         question: str,
-        execution_results: List[Dict[str, Any]],
+        execution_results: list[dict[str, Any]],
         progress_callback: Optional[Callable[[str, str], None]] = None,
         logger: Optional[SessionLogger] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Run peer review process.
         
@@ -109,8 +109,8 @@ class AgentCouncilService:
     @staticmethod
     async def synthesize_verdict(
         question: str,
-        execution_results: List[Dict[str, Any]],
-        peer_reviews: List[Dict[str, Any]],
+        execution_results: list[dict[str, Any]],
+        peer_reviews: list[dict[str, Any]],
         logger: Optional[SessionLogger] = None
     ) -> str:
         """
@@ -134,9 +134,9 @@ class AgentCouncilService:
     
     @staticmethod
     def aggregate_reviews(
-        execution_results: List[Dict[str, Any]],
-        reviews: List[Dict[str, Any]]
-    ) -> Dict[int, Dict[str, Any]]:
+        execution_results: list[dict[str, Any]],
+        reviews: list[dict[str, Any]]
+    ) -> dict[int, dict[str, Any]]:
         """
         Aggregate structured peer-review scores by proposal_id.
         

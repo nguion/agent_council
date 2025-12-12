@@ -6,16 +6,17 @@ These tests focus on verifying DB-side effects (SessionState + Session metadata)
 without calling external LLM APIs.
 """
 
-import tempfile
 import os
+import tempfile
 
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from src.web.api import app
-from src.web.database import Base, get_db, Session as DBSession, SessionState
+from src.web.database import Base, SessionState, get_db
+from src.web.database import Session as DBSession
 
 
 @pytest.fixture(scope="session")

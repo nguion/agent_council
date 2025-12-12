@@ -3,11 +3,11 @@ Council Editor Module.
 Provides interactive functions to edit, add, or remove agents from the council configuration.
 """
 
-from typing import Dict, Any, List
+from typing import Any
+
 from rich.console import Console
+from rich.prompt import Confirm, Prompt
 from rich.table import Table
-from rich.prompt import Prompt, Confirm
-from rich.panel import Panel
 
 console = Console()
 
@@ -15,7 +15,7 @@ class CouncilEditor:
     """Interactive editor for the agent council configuration."""
 
     @staticmethod
-    def display_agents(agents: List[Dict[str, Any]]):
+    def display_agents(agents: list[dict[str, Any]]):
         """Show the current list of agents in a table."""
         table = Table(title="Current Council Composition", show_lines=True)
         table.add_column("#", justify="right", style="cyan", no_wrap=True)
@@ -36,7 +36,7 @@ class CouncilEditor:
         console.print(table)
 
     @classmethod
-    def edit_agent(cls, agent: Dict[str, Any]) -> Dict[str, Any]:
+    def edit_agent(cls, agent: dict[str, Any]) -> dict[str, Any]:
         """Interactively edit a single agent."""
         console.print(f"\n[bold]Editing Agent: {agent.get('name')}[/bold]")
         
@@ -71,7 +71,7 @@ class CouncilEditor:
         return agent
 
     @classmethod
-    def add_agent(cls) -> Dict[str, Any]:
+    def add_agent(cls) -> dict[str, Any]:
         """Create a new agent from scratch."""
         console.print("\n[bold]Adding New Agent[/bold]")
         
@@ -97,7 +97,7 @@ class CouncilEditor:
         }
 
     @classmethod
-    def run_editor(cls, council_config: Dict[str, Any]) -> Dict[str, Any]:
+    def run_editor(cls, council_config: dict[str, Any]) -> dict[str, Any]:
         """Main loop for the editor."""
         agents = council_config.get('agents', [])
         

@@ -6,8 +6,7 @@ Writes a markdown file per session and accumulates token totals and costs.
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
-
+from typing import Any, Optional
 
 # Pricing per million tokens (as of December 2024/January 2025)
 # Source: https://openai.com/api/pricing/
@@ -36,7 +35,7 @@ MODEL_PRICING = {
 }
 
 
-def get_model_pricing(model: str) -> Dict[str, float]:
+def get_model_pricing(model: str) -> dict[str, float]:
     """Get pricing for a model, with fallback to default."""
     model_lower = model.lower()
     # Try exact match first
@@ -72,7 +71,7 @@ class SessionLogger:
 
     def _write_header(self):
         with open(self.path, "w", encoding="utf-8") as f:
-            f.write(f"# LLM Session Log\n\n")
+            f.write("# LLM Session Log\n\n")
             f.write(f"- Session: {self.session_id}\n")
             f.write(f"- Started (UTC): {datetime.now(timezone.utc).isoformat()}\n\n")
             f.write("## Calls\n\n")
@@ -83,7 +82,7 @@ class SessionLogger:
         agent_name: str,
         prompt: str,
         response: str,
-        usage: Optional[Dict[str, Any]] = None,
+        usage: Optional[dict[str, Any]] = None,
         model: Optional[str] = None,
         tools_used: Optional[Any] = None,
         error: bool = False,
@@ -141,7 +140,7 @@ class SessionLogger:
             f"Cost: ${self.total_cost:.4f}"
         )
     
-    def get_cost_breakdown(self) -> Dict[str, Any]:
+    def get_cost_breakdown(self) -> dict[str, Any]:
         """Get detailed cost breakdown."""
         return {
             "input_tokens": self.total_input_tokens,

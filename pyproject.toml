@@ -13,17 +13,22 @@ extend-exclude = [
   "src/agent_council.egg-info",
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"src/web/api.py" = ["ANN", "B008"]
+"tests/*" = ["D", "ANN", "S101"]
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 ignore = [
   "E501", # handled by formatter / not enforced for now
+  "B904", # raise without from
 ]
 
 [tool.ruff.lint.isort]
 known-first-party = ["agent_council", "src"]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.12"
 warn_unused_ignores = true
 warn_redundant_casts = true
 warn_unreachable = true
