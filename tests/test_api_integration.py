@@ -90,8 +90,8 @@ def client(test_db, monkeypatch):
 class TestSessionLifecycle:
     """Test complete session lifecycle."""
     
-    def test_create_session(self, client):
-        """Test session creation with question."""
+    def create_session_helper(self, client):
+        """Helper to create session with question."""
         response = client.post(
             "/api/sessions",
             data={"question": "How do I test my Agent Council?"},
@@ -102,6 +102,10 @@ class TestSessionLifecycle:
         assert "session_id" in data
         assert data["question"] == "How do I test my Agent Council?"
         return data["session_id"]
+
+    def test_create_session(self, client):
+        """Test session creation endpoint."""
+        self.create_session_helper(client)
     
     def test_build_council_requires_question(self, client):
         """Test that building council validates question exists."""
@@ -112,7 +116,7 @@ class TestSessionLifecycle:
     def test_build_council_success(self, client):
         """Test building council configuration."""
         # Create session
-        session_id = self.test_create_session(client)
+        session_id = self.create_session_helper(client)
         
         # Build council
         response = client.post(f"/api/sessions/{session_id}/build_council")
@@ -126,7 +130,7 @@ class TestSessionLifecycle:
     
     def test_idempotent_build(self, client):
         """Test that building twice doesn't re-run without force flag."""
-        session_id = self.test_create_session(client)
+        session_id = self.create_session_helper(client)
         
         # First build
         response1 = client.post(f"/api/sessions/{session_id}/build_council")
@@ -140,7 +144,7 @@ class TestSessionLifecycle:
     
     def test_execute_requires_council(self, client):
         """Test that execute validates council_config exists."""
-        session_id = self.test_create_session(client)
+        session_id = self.create_session_helper(client)
         
         # Try to execute without building council
         response = client.post(f"/api/sessions/{session_id}/execute")
@@ -150,7 +154,7 @@ class TestSessionLifecycle:
     
     def test_peer_review_requires_execution(self, client):
         """Test that peer review validates execution_results exist."""
-        session_id = self.test_create_session(client)
+        session_id = self.create_session_helper(client)
         
         # Try peer review without execution
         response = client.post(f"/api/sessions/{session_id}/peer_review")
@@ -160,7 +164,7 @@ class TestSessionLifecycle:
     
     def test_synthesize_requires_reviews(self, client):
         """Test that synthesize validates peer_reviews exist."""
-        session_id = self.test_create_session(client)
+        session_id = self.create_session_helper(client)
         
         # Try synthesize without reviews
         response = client.post(f"/api/sessions/{session_id}/synthesize")
