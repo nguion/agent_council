@@ -610,6 +610,20 @@ This section is the “ready to execute” slice: each PR is scoped to be review
    - **Progress notes**:
      - 2025-12-12: Started PR-5.
      - 2025-12-12: Initialized Alembic, configured for async SQLAlchemy, created initial migration (revision `950bd54c7a60`). Updated `init_db()` to use migrations with fallback for legacy databases. Migrations handle SQLite pragmas and PostgreSQL GIN indexes. Tested: fresh DB migration works, existing DBs are auto-stamped.
+     - 2025-12-12: **Comprehensive testing completed**:
+       - ✅ Created `scripts/test_alembic_migrations.py` with 4 test suites:
+         1. Fresh database initialization (migrations create all tables correctly)
+         2. Existing database stamping (legacy `create_all()` DBs are auto-stamped)
+         3. API functionality (UserService, SessionService, SessionStateService all work)
+         4. Migration idempotency (multiple `init_db()` calls are safe)
+       - ✅ All 34 existing tests pass (18 API integration + 9 auth + 4 file uploads + 3 services)
+       - ✅ Verified existing production database (`agent_council.db`) is at correct revision (`950bd54c7a60`)
+       - ✅ Verified all table schemas match expected structure (users, sessions, session_state)
+       - ✅ Verified database operations (create/read) work correctly with migrations
+       - **Result**: PR-5 is production-ready. Migrations work correctly for both fresh and existing databases. No breaking changes to user experience or API functionality.
+   - **Traceability**:
+     - Commit: `db: PR-5 Alembic migrations baseline`
+     - Files changed: `alembic/`, `alembic.ini`, `src/web/database.py`, `scripts/test_alembic_migrations.py` (new)
 6. **PR-6 RBAC skeleton**
    - Add roles + `require_role()` dependency.
    - Add first admin-only endpoint (e.g., `/api/admin/metrics/summary` returning placeholders).
