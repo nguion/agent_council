@@ -5,7 +5,7 @@ Replaces file-based state.json with database JSON storage.
 
 import copy
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -113,7 +113,7 @@ class SessionStateService:
             Initial state dict
         """
         if created_at is None:
-            created_at = datetime.utcnow()
+            created_at = datetime.now(timezone.utc)
         
         initial_state = {
             "session_id": session_id,
@@ -172,7 +172,7 @@ class SessionStateService:
                 raise ValueError(f"Session {session_id} not found")
 
             merged_state = SessionStateService._deep_merge(current_state, updates)
-            merged_state["updated_at"] = datetime.utcnow().isoformat()
+            merged_state["updated_at"] = datetime.now(timezone.utc).isoformat()
 
             await SessionStateService._persist_state(db, session_id, merged_state)
             await SessionStateService._sync_session_metadata(db, session_id, merged_state, user_id)
@@ -290,11 +290,11 @@ class SessionStateService:
         """Upsert into SessionState (DB-only)."""
         state_row = await db.get(SessionState, session_id)
         if not state_row:
-            state_row = SessionState(session_id=session_id, state=state, updated_at=datetime.utcnow())
+            state_row = SessionState(session_id=session_id, state=state, updated_at=datetime.now(timezone.utc))
             db.add(state_row)
         else:
             state_row.state = state
-            state_row.updated_at = datetime.utcnow()
+            state_row.updated_at = datetime.now(timezone.utc)
     # AI Generated Code by Deloitte + Cursor (END)
 
     @staticmethod
@@ -306,7 +306,7 @@ class SessionStateService:
     ):
         """Sync key metadata fields onto the sessions table for fast querying."""
         column_updates = {
-            "updated_at": datetime.utcnow()
+            "updated_at": datetime.now(timezone.utc)
         }
 
         if "current_step" in merged_state:

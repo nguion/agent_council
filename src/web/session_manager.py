@@ -5,7 +5,6 @@ State management is now handled by SessionStateService (database-backed).
 """
 
 import os
-import json
 import uuid
 import shutil
 from datetime import datetime, timezone
@@ -39,7 +38,7 @@ class SessionManager:
         Returns:
             Unique session ID string
         """
-        return f"session_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+        return f"session_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
     
     def _get_session_dir(self, session_id: str) -> Path:
         """Get the directory path for a session."""
@@ -109,65 +108,3 @@ class SessionManager:
         session_dir = self._get_session_dir(session_id)
         if session_dir.exists():
             shutil.rmtree(session_dir)
-    
-    def get_state(self, session_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Get session state from state.json file.
-        Used for background tasks to avoid database lock contention.
-        
-        Args:
-            session_id: Session identifier
-            
-        Returns:
-            State dict or None if not found
-        """
-        state_file = self._get_session_dir(session_id) / "state.json"
-        if not state_file.exists():
-            return None
-        
-        try:
-            with open(state_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"Error reading state for {session_id}: {e}")
-            return None
-    
-    def update_state(self, session_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Update session state in state.json file.
-        Used for background tasks to avoid database lock contention.
-        
-        Args:
-            session_id: Session identifier
-            updates: Dictionary of fields to update
-            
-        Returns:
-            Updated state dict
-        """
-        state_file = self._get_session_dir(session_id) / "state.json"
-        
-        # Load current state or create new
-        if state_file.exists():
-            with open(state_file, 'r', encoding='utf-8') as f:
-                state = json.load(f)
-        else:
-            state = {
-                "session_id": session_id,
-                "created_at": datetime.utcnow().isoformat()
-            }
-        
-        # Merge updates (deep merge for nested dicts)
-        for key, value in updates.items():
-            if key in state and isinstance(state[key], dict) and isinstance(value, dict):
-                # Merge nested dicts
-                state[key] = {**state[key], **value}
-            else:
-                state[key] = value
-        
-        state["updated_at"] = datetime.utcnow().isoformat()
-        
-        # Write back to file
-        with open(state_file, 'w', encoding='utf-8') as f:
-            json.dump(state, f, indent=2, ensure_ascii=False)
-        
-        return state
