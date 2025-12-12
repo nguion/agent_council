@@ -2,6 +2,7 @@
 ## Agent Council — Internal Deployment Readiness Plan (Handoff Roadmap)
 
 ### Instructions for usage (mandatory for any agent/contributor)
+- **Branch Strategy**: All work for this plan MUST happen on the `handoff-ready` branch. Do not commit directly to `main` until the full plan is complete and reviewed.
 - **This plan is the single source of truth** for handoff-readiness work. If you execute tasks from it, you must keep it current so others can review progress.
 - **Priority #1 (besides code quality): keep this file accurate.** Do not let work happen “in chat only” or in private notes.
 - **Update the plan as you work**, not after:
@@ -18,9 +19,10 @@
 - **Last updated**: 2025-12-12 (UTC) by Cursor (GPT-5.2)
 - **Current sprint**: Sprint 1 — Make the repo trustworthy + establish security posture (Handoff Polish)
 - **In progress**:
-  - PR-1 Docs alignment
+  - (none)
 - **Completed this sprint**:
   - `docs/ARCHITECTURE.md` rewritten to match current DB-first `session_state` + local filesystem artifacts (part of PR-1)
+  - Added v1 docs for Data Handling, Security Model, Privacy, and Runbook (part of PR-1)
 - **Open decisions**:
   - Hosting platform — Owner: SRE/Platform — Due: Handoff
   - Queue/worker system — Owner: Backend + SRE — Due: Sprint 3
@@ -478,7 +480,7 @@ Keep this table current as decisions get made. Default stance: **track unknowns 
 This section is the “ready to execute” slice: each PR is scoped to be reviewable and reversible.
 
 #### Sprint 1 — suggested PR sequence
-1. **PR-1 Docs alignment** — **in progress**
+1. **PR-1 Docs alignment** — **Done**
    - Update `docs/ARCHITECTURE.md` to match DB-primary state and in-process BackgroundTasks reality.
    - Add `docs/DATA_HANDLING.md`, `docs/SECURITY_MODEL.md`, `docs/PRIVACY_NOTES.md`, `docs/RUNBOOK.md` stubs (high-level first; iterate later).
    - **Execution plan (this session)**:
@@ -500,6 +502,8 @@ This section is the “ready to execute” slice: each PR is scoped to be review
      - 2025-12-12: Started PR-1. (Traceability will be added as files change.)
      - 2025-12-12: `docs/ARCHITECTURE.md` currently documents legacy `state.json`-primary behavior; current implementation is DB-backed `session_state` via `SessionStateService`. Updating docs to match current code.
      - 2025-12-12: Updated `docs/ARCHITECTURE.md` to describe current DB-first state + in-process background tasks + filesystem artifacts. Traceability: PR/commit TBD. Files: `docs/ARCHITECTURE.md`.
+     - 2025-12-12: Added `docs/DATA_HANDLING.md`, `docs/SECURITY_MODEL.md`, `docs/PRIVACY_NOTES.md`, `docs/RUNBOOK.md` as v1 stubs. Traceability: Commit `f69354b`. Files: `docs/*`.
+     - 2025-12-12: Completed PR-1. All docs present and aligned with code.
 2. **PR-2 DX fixes**
    - Fix `scripts/verify_setup.py` (it currently references removed files and missing docs).
    - Add `.env.example` + `web-ui/.env.example`.
